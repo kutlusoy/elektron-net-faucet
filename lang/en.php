@@ -82,6 +82,8 @@ return [
     'set.wallet_name'           => 'Wallet name (for /wallet/<name> endpoint; blank for default)',
     'set.wallet_pass'           => 'Wallet passphrase (leave blank to keep)',
     'set.sender_addr'           => 'Sender address (display only; sendtoaddress auto-selects UTXOs)',
+    'set.tls_verify'            => 'Verify TLS certificate (recommended)',
+    'set.tls_verify_warn'       => '⚠ Disable only for nodes reached over a private network (VPN, WireGuard, SSH tunnel) or with a self-signed cert from your own CA. Disabling on a public network exposes the RPC password and lets anyone in the path impersonate the node.',
     'set.captcha_site'          => 'Site key',
     'set.captcha_secret'        => 'Secret key (leave blank to keep)',
     'set.save'                  => 'Save',
