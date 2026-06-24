@@ -32,20 +32,157 @@ browser-based setup wizard, configure everything from the admin panel.
 
 ---
 
-## Installation
+## Installation — step by step
 
-### 1. Upload files
+Plan ahead: the node and the website can live on the same machine or on
+separate ones. Either way the order is **node first, website second**
+because the website will ask you for the node's RPC credentials.
 
-Upload the contents of this repository to your webhost so that the layout looks like:
+> **Conventions in this guide**
+> - `node.example.com` = the machine running `elektron-net`.
+> - `faucet.example.com` = the webhost serving the PHP files.
+> - Commands prefixed `#` run as root; `$` as a normal user; `PS>` in an
+>   elevated PowerShell on Windows; `cmd>` in a normal Windows cmd shell.
+
+---
+
+### Part 1 — Configure the node
+
+You need an `elektron-net` daemon you control, with an encrypted wallet and
+JSON-RPC enabled. The wallet's private key never leaves this machine.
+
+#### 1.1  Locate `bitcoin.conf` (yes, the file is still called that)
+
+- **Linux**:   `~/.bitcoin/bitcoin.conf`
+- **macOS**:   `~/Library/Application Support/Bitcoin/bitcoin.conf`
+- **Windows**: `%APPDATA%\Elektron\bitcoin.conf` — for example
+  `C:\Users\you\AppData\Roaming\Elektron\bitcoin.conf`. Create the file if
+  it doesn't exist.
+
+#### 1.2  Enable RPC
+
+Open `bitcoin.conf` in a text editor and add:
+
+```ini
+server=1
+rpcbind=127.0.0.1
+rpcallowip=127.0.0.1
+rpcuser=faucetuser
+rpcpassword=REPLACE_WITH_A_LONG_RANDOM_PASSWORD
+```
+
+Generate a strong RPC password (do **not** reuse passwords):
+
+- **Linux/macOS**: `openssl rand -hex 32`
+- **Windows PowerShell**: `-join ((48..57)+(65..90)+(97..122)|Get-Random -Count 48|ForEach-Object{[char]$_})`
+
+If the node will be on a **different machine** than the faucet, do not add
+the node's public IP to `rpcallowip` here — leave it `127.0.0.1` and use
+one of the tunnels in [Running the node on a separate host](#running-the-node-on-a-separate-host).
+
+#### 1.3  Restart the node and verify it's listening
+
+- **Linux** (systemd): `# systemctl restart elektrond` (or kill/restart your
+  daemon however you started it).
+- **macOS**: quit and re-open the app.
+- **Windows**: quit the GUI from the tray, or
+  `PS> Restart-Service ElektronNode` if you set it up as a service.
+
+Verify locally:
+
+```bash
+$ elektron-cli getblockchaininfo
+```
+
+```cmd
+cmd> "C:\Program Files\Elektron\daemon\elektron-cli.exe" getblockchaininfo
+```
+
+You should see JSON output. If you get "connection refused" the node isn't
+listening; if you get "401" your RPC credentials are wrong.
+
+#### 1.4  Create and encrypt a dedicated wallet
+
+```bash
+$ elektron-cli createwallet "faucet"
+$ elektron-cli -rpcwallet=faucet encryptwallet "REPLACE_WITH_A_LONG_PASSPHRASE"
+```
+
+```cmd
+cmd> elektron-cli.exe createwallet "faucet"
+cmd> elektron-cli.exe -rpcwallet=faucet encryptwallet "REPLACE_WITH_A_LONG_PASSPHRASE"
+```
+
+**Save the passphrase in a password manager — you'll paste it once into the
+faucet's admin panel and it will be encrypted at rest in MySQL.** If you
+lose it, you cannot spend from this wallet.
+
+After `encryptwallet` the node restarts the wallet in locked state. Verify:
+
+```bash
+$ elektron-cli -rpcwallet=faucet getwalletinfo
+# look for: "unlocked_until": 0
+```
+
+#### 1.5  Generate a deposit address
+
+```bash
+$ elektron-cli -rpcwallet=faucet getnewaddress "" bech32
+# → be1q...
+```
+
+Copy that `be1q…` address. You will fund it from your prepaid stash in
+Part 3.
+
+#### 1.6  Wait for sync
+
+Run `elektron-cli getblockchaininfo` until `"initialblockdownload": false`.
+A faucet cannot pay out until the node is fully synced.
+
+✅ **Node ready.** Note these values — you'll paste them into the admin panel:
+RPC user, RPC password, wallet name (`faucet`), wallet passphrase, the
+deposit address.
+
+---
+
+### Part 2 — Install the website (faucet)
+
+#### 2.1  Pick a webhost
+
+Any host that gives you PHP 8.1+ with the `pdo_mysql`, `curl`, `openssl`,
+and `mbstring` extensions, plus a MySQL/MariaDB database. Shared hosting,
+a VPS, or your own server all work.
+
+#### 2.2  Create the MySQL database
+
+Either via your hoster's panel (phpMyAdmin / cPanel / Plesk) or via SQL:
+
+```sql
+CREATE DATABASE elek_faucet CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'elek_faucet'@'localhost' IDENTIFIED BY 'A_STRONG_DB_PASSWORD';
+GRANT ALL PRIVILEGES ON elek_faucet.* TO 'elek_faucet'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Note the database name, user, password, and host (often `localhost`).
+
+#### 2.3  Upload the files
+
+Get the repository onto the host:
+
+```bash
+$ git clone https://github.com/kutlusoy/elektron-net-faucet.git
+```
+
+Or download the ZIP from GitHub and upload via FTP/SFTP. Final layout:
 
 ```
-/your-site/
-├── config.php          ← created by the installer (NOT in git)
-├── .installed          ← created by the installer (NOT in git)
+/var/www/elek-faucet/         ← project root (NOT served by the webserver)
 ├── lang/
 ├── sql/
 ├── src/
-└── public/             ← THIS is your DocumentRoot
+├── config.example.php
+└── public/                   ← THIS is your web-server DocumentRoot
     ├── index.php
     ├── admin.php
     ├── api.php
@@ -54,102 +191,146 @@ Upload the contents of this repository to your webhost so that the layout looks 
     └── assets/
 ```
 
-Point your web-server's DocumentRoot to `public/`. This keeps `config.php`,
-`src/`, `lang/`, and `sql/` outside the webroot.
+Point the web-server's DocumentRoot at `public/`. On shared hosting that
+forces a single public webroot, copy everything into the webroot — the
+included `public/.htaccess` blocks direct access to anything outside the
+file whitelist.
 
-If your hosting only lets you upload into a single public webroot, copy
-everything into one directory — the included `public/.htaccess` blocks direct
-PHP access to anything outside the file whitelist.
+Apache + HTTPS minimum vhost:
 
-### 2. Create a MySQL database
-
-```sql
-CREATE DATABASE elek_faucet CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'elek_faucet'@'localhost' IDENTIFIED BY 'a-strong-password';
-GRANT ALL PRIVILEGES ON elek_faucet.* TO 'elek_faucet'@'localhost';
-FLUSH PRIVILEGES;
+```apache
+<VirtualHost *:443>
+    ServerName faucet.example.com
+    DocumentRoot /var/www/elek-faucet/public
+    <Directory /var/www/elek-faucet/public>
+        AllowOverride All
+        Require all granted
+    </Directory>
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/faucet.example.com/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/faucet.example.com/privkey.pem
+</VirtualHost>
 ```
 
-### 3. Run the setup wizard
+Nginx + PHP-FPM equivalent:
 
-Open in your browser:
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name faucet.example.com;
+    root /var/www/elek-faucet/public;
+    index index.php;
 
+    ssl_certificate     /etc/letsencrypt/live/faucet.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/faucet.example.com/privkey.pem;
+
+    location / { try_files $uri $uri/ /index.php?$query_string; }
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php8.1-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    }
+}
 ```
-https://your-faucet.example/install.php
-```
 
-Fill in:
+**Always serve via HTTPS.** The faucet sets an HSTS header automatically
+when it detects HTTPS, and admin session cookies are flagged `Secure`.
 
-- Database host, port, name, user, password.
-- Admin username and password (≥ 10 characters).
+#### 2.4  Run the browser installer
 
-The wizard will:
+Open: `https://faucet.example.com/install.php`
 
-1. Generate a 32-byte `app_key` (used to encrypt secrets at rest).
-2. Write `/config.php` (outside webroot).
+Pick your language at the top, then fill in:
+
+- **Database**: host, port (3306), name, user, password — from step 2.2.
+- **Admin account**: username, password (≥ 10 characters).
+
+Click **Install**. The wizard will:
+
+1. Generate a random 32-byte `app_key` (used to encrypt secrets at rest).
+2. Write `/config.php` outside the webroot, mode 0600.
 3. Import `sql/schema.sql`.
-4. Create the admin account.
-5. Seed default settings (small amounts; safe to play with).
-6. Lock itself via `.installed`.
+4. Create your admin user (Argon2id hash).
+5. Seed safe default settings.
+6. Write `/.installed` to prevent re-runs.
 
-**After success: delete `public/install.php`.** The lock file prevents
-re-running, but removing the script entirely is best practice.
+When you see "Installation successful":
 
-### 4. Prepare your elektron-net node
+**Delete `public/install.php`** (`rm public/install.php` or via FTP). The
+lock file blocks re-runs, but removing the script entirely is best
+practice.
 
-On the host running `elektron-net`:
+#### 2.5  Log in and configure
 
-```bash
-# Create a fresh wallet (you can pick any name)
-elektron-cli createwallet "faucet"
+Go to `https://faucet.example.com/admin.php` and log in with the admin
+account you just created. In **Settings**, fill in three blocks and click
+**Save**:
 
-# Get a deposit address — fund this from your prepaid be1q… address
-elektron-cli -rpcwallet=faucet getnewaddress "" bech32
-# → returns: be1q...
+**Faucet**
+- *Title* — shown at the top of the public page.
+- *Welcome text* — short description shown to claimers.
+- *Amount per claim* — e.g. `0.001` ELEK. Start small.
+- *Daily / hourly budget* — caps in a rolling 24h / 1h window. `0` =
+  unlimited (not recommended on mainnet).
+- *Cooldown per address* — e.g. `24` (hours). One claim per address per
+  day.
+- *Cooldown per IP* — e.g. `1` (hour). Soft anti-spam.
+- *Explorer URL prefix* — e.g. `https://explorer.example/tx/`. The txid is
+  appended so successful claims show a clickable link.
+- *Default language* — fallback when the visitor's browser doesn't request
+  a language we ship.
 
-# Encrypt the wallet (REMEMBER THIS PASSPHRASE — it goes into the faucet's admin panel)
-elektron-cli -rpcwallet=faucet encryptwallet "your-very-long-passphrase"
-```
+**Wallet RPC** (these are the values from Part 1)
+- *RPC host* — `127.0.0.1` if node and website share a machine; for a
+  remote node see [Running the node on a separate host](#running-the-node-on-a-separate-host).
+- *RPC port* — `8332` (Bitcoin-Core default).
+- *RPC user* — `faucetuser` (whatever you put in `bitcoin.conf`).
+- *RPC password* — the long random string from step 1.2. **Leaving this
+  field blank during a later save keeps the existing value.**
+- *Wallet name* — `faucet` (the name you used in step 1.4).
+- *Wallet passphrase* — the passphrase from `encryptwallet` in step 1.4.
+- *Sender address* — purely informational, shown in the admin UI.
+  `sendtoaddress` picks UTXOs automatically.
 
-In your node's `bitcoin.conf` (yes, the file is still called bitcoin.conf in
-the Bitcoin-Core-derived codebase) enable RPC:
+**hCaptcha** (strongly recommended — bots will find you)
+1. Sign up at <https://www.hcaptcha.com/> (free tier is fine).
+2. Create a new site for your faucet domain.
+3. Copy the **Site key** and **Secret key** into the form.
 
-```ini
-server=1
-rpcuser=faucetuser
-rpcpassword=a-long-random-rpc-password
-rpcbind=127.0.0.1
-rpcallowip=127.0.0.1
-# If the faucet runs on a different host than the node, use a private network
-# or SSH tunnel — never expose RPC to the internet.
-```
+After saving, click **Test RPC connection** (you should see
+`getwalletinfo` JSON) and then **Test wallet unlock** (should report
+`unlocked_and_locked_ok`). Both green = wired up correctly.
 
-Restart the node.
+---
 
-### 5. Configure the faucet
+### Part 3 — Fund and go live
 
-Log in at `https://your-faucet.example/admin.php` with the admin user.
+1. From your prepaid `be1q…` address, send some ELEK to the deposit
+   address from step 1.5. Keep the hot wallet small (e.g. a week of
+   payouts) and top it up as needed.
+2. Wait for at least one confirmation. The admin dashboard's
+   **Wallet balance** kpi updates live via `getbalance`.
+3. Open `https://faucet.example.com/` in a private window, paste a
+   testnet/personal address, solve the captcha, and submit. You should
+   get a real `txid` link.
+4. Verify on your block explorer that the transaction is broadcast.
 
-In **Settings** fill in:
+🎉 **Live.** Watch the **Today** and **This hour** kpis to confirm the
+budget is being enforced as you expect, then share the URL.
 
-- **Faucet**: title, welcome text, amount per claim, daily/hourly budget,
-  cooldowns, explorer URL prefix (e.g. `https://explorer.example/tx/`),
-  default language.
-- **Wallet RPC**: host, port (8332 by default), RPC user/password, wallet
-  name (`faucet` if you followed step 4), wallet passphrase (the one you
-  chose with `encryptwallet`).
-- **hCaptcha**: site key + secret key from <https://www.hcaptcha.com/>.
+---
 
-Click **Save**, then use **Test RPC connection** and **Test wallet unlock**.
-Both should report success.
+### Common pitfalls
 
-### 6. Fund the faucet
-
-Send ELEK from your prepaid `be1q…` address to the deposit address you got in
-step 4. The dashboard's "Wallet balance" will update via `getbalance` after
-the transaction confirms.
-
-You're live.
+| Symptom                                       | Likely cause                                                                              |
+|-----------------------------------------------|-------------------------------------------------------------------------------------------|
+| `Test RPC connection` → "Connection refused"  | Node isn't running, or `rpcbind` doesn't include the interface the faucet connects to.    |
+| `Test RPC connection` → "401 Unauthorized"    | `rpc_user`/`rpc_pass` in the admin panel doesn't match `bitcoin.conf`.                    |
+| `Test wallet unlock` → "wallet not found"     | `Wallet name` in admin doesn't match — the node has no wallet with that name. Re-check step 1.4. |
+| `Test wallet unlock` → "passphrase incorrect" | The passphrase in admin doesn't match what you used in `encryptwallet`.                   |
+| Claim returns "Payout failed"                 | Insufficient wallet balance, or fee estimation failed (node not fully synced).            |
+| Public page shows "Faucet is disabled"        | `amount_per_claim` is `0`. Set it in the admin panel.                                     |
+| Installer says "Already installed"            | Delete `.installed` in the project root to re-run.                                        |
 
 ---
 
