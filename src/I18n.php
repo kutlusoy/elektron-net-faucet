@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace ElektronFaucet;
+namespace ElektronFaucet {
 
 /**
  * Simple file-based translations. One PHP file per locale under /lang.
@@ -106,6 +106,10 @@ final class I18n
     }
 }
 
+} // namespace ElektronFaucet
+
+namespace {
+
 if (!function_exists('__')) {
     function __(string $key, array $params = []): string
     {
@@ -118,3 +122,5 @@ if (!function_exists('he')) {
         return htmlspecialchars(\ElektronFaucet\I18n::t($key, $params), ENT_QUOTES, 'UTF-8');
     }
 }
+
+} // global namespace
