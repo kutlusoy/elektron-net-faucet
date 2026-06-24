@@ -342,6 +342,14 @@ credentials with HTTP Basic Auth, in cleartext, and has no rate-limit of its
 own. Use one of the three patterns below; they cover essentially every
 deployment.
 
+> **Quick chooser**
+> - You have shell/root on both sides → **Pattern A (SSH tunnel)**.
+> - You want a permanent private network → **Pattern B (WireGuard)**.
+> - The faucet runs on **shared hosting with no shell access** (FTP/SFTP only,
+>   no SSH, no system services, no VPN client) → **Pattern C (TLS terminator
+>   on the node side)**. You only configure things on the node host; the
+>   webserver just gets an `https://…` URL pasted into the admin panel.
+
 ### Pattern A — SSH reverse tunnel (recommended for most operators)
 
 The node keeps `rpcbind=127.0.0.1` (never exposed to the internet). The faucet
@@ -446,12 +454,37 @@ auto-assigned `100.x.y.z` addresses.
 
 ### Pattern C — TLS terminator (when A and B aren't available)
 
-If you cannot run a tunnel (e.g. managed PaaS, multiple faucet hosts behind a
-CDN that needs to reach the node), put a TLS terminator in front of the node
-RPC with a valid certificate and either client-certificate auth or strict IP
-allow-listing.
+Choose this if the faucet runs on **shared hosting with FTP/SFTP only** (no
+SSH, no system services, no VPN client), on a managed PaaS, or when several
+faucet hosts behind a CDN need to reach the same node. All the setup
+happens on the **node host** — on the webserver you just paste an
+`https://…` URL into the admin panel.
 
-nginx snippet on the node host:
+#### Prerequisites
+- A domain or subdomain pointing at the node's public IP (e.g.
+  `node.example.com` → `<node-public-ip>`).
+- Inbound TCP 443 open on the node host (firewall + router).
+- A valid TLS certificate. Use **Let's Encrypt** — it's free and the cert
+  manager (Caddy / certbot) handles renewal automatically.
+- Know either the **fixed public IP of your webserver** (for IP
+  allow-listing) or accept that you'll add HTTP Basic Auth as a second
+  layer instead — see "When the webserver has no fixed IP" below.
+
+#### Variant 1 — Caddy on the node host (easiest, auto-HTTPS)
+
+```caddyfile
+node.example.com {
+    @allow remote_ip <webserver-public-ip>
+    reverse_proxy @allow 127.0.0.1:8332
+    respond 403
+}
+```
+
+That's the entire config. Save as `/etc/caddy/Caddyfile` and `systemctl
+restart caddy` — Caddy fetches and renews the Let's Encrypt cert by
+itself. On Windows: same `Caddyfile`, then `caddy.exe service install`.
+
+#### Variant 2 — nginx on the node host
 
 ```nginx
 server {
@@ -460,7 +493,7 @@ server {
     ssl_certificate     /etc/letsencrypt/live/node.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/node.example.com/privkey.pem;
 
-    allow <faucet-public-ip>/32;
+    allow <webserver-public-ip>/32;
     deny all;
 
     location / {
@@ -471,11 +504,74 @@ server {
 }
 ```
 
-In the admin panel, set `RPC host = https://node.example.com/`. The faucet's
-`RpcClient` recognises the `https://` prefix and uses TLS with peer
-verification enabled. Self-signed certificates require their CA to be
-installed in the faucet host's system trust store — there is no setting to
-disable verification.
+Obtain the cert once with `certbot --nginx -d node.example.com`. The
+included `--nginx` plugin sets up auto-renewal as a cron job.
+
+#### Wire it up in the faucet admin panel
+
+Admin → Settings → Wallet RPC:
+
+| Field            | Value                                                       |
+|------------------|-------------------------------------------------------------|
+| RPC host         | `https://node.example.com/`                                 |
+| RPC port         | ignored when the host field includes a scheme               |
+| RPC user         | the `rpcuser` from your node's `bitcoin.conf`               |
+| RPC password     | the `rpcpassword` from your node's `bitcoin.conf`           |
+| Wallet name      | e.g. `faucet`                                               |
+| Wallet passphrase| the one used with `encryptwallet`                           |
+
+Click **Save**, then **Test RPC connection**. Green = working.
+
+`RpcClient` recognises the `https://` prefix automatically and uses TLS
+with peer verification enabled. **Self-signed certificates fail by
+design** — if you must use one, install the CA into your faucet host's
+system trust store. There is no setting to disable verification, because
+disabling it would defeat the purpose.
+
+#### When the webserver has no fixed outbound IP
+
+Some shared hosters route outbound traffic through an IP pool, so you
+can't pin a single `allow <ip>;` line. Don't drop the allow-list to
+`0.0.0.0/0` — add a second layer instead:
+
+**Option 1: HTTP Basic Auth in nginx / Caddy.** The faucet's `RpcClient`
+already sends `Basic` credentials for RPC. Layer another Basic-Auth check
+in front using credentials *different* from the RPC ones. nginx:
+
+```nginx
+location / {
+    auth_basic           "node-rpc";
+    auth_basic_user_file /etc/nginx/.rpc_htpasswd;
+    proxy_pass           http://127.0.0.1:8332/;
+}
+```
+
+Caddy:
+
+```caddyfile
+node.example.com {
+    basic_auth {
+        gate $2a$14$...bcrypt-hash...
+    }
+    reverse_proxy 127.0.0.1:8332
+}
+```
+
+Then in the admin panel set
+`RPC host = https://gate:layer-password@node.example.com/`. The faucet's
+URL parser passes the userinfo straight into the Basic-Auth header.
+The inner RPC password is unchanged.
+
+**Option 2: Client certificates.** mTLS in nginx (`ssl_client_certificate`
++ `ssl_verify_client on`). Stronger than Basic Auth, but requires
+managing client cert files on the faucet host — usually only worth it
+for high-value setups.
+
+**Option 3: Cheap in-between VPS.** If neither side fits, rent a €3-5/month
+VPS in the middle: WireGuard between VPS and node, TLS terminator on the
+VPS, IP-allow the VPS on the node, and the faucet calls the VPS over
+HTTPS. This buys you a fixed IP plus root access for the cost of a coffee
+per month.
 
 ### Node on Windows
 
