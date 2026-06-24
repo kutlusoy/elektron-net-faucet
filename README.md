@@ -331,6 +331,8 @@ budget is being enforced as you expect, then share the URL.
 | Claim returns "Payout failed"                 | Insufficient wallet balance, or fee estimation failed (node not fully synced).            |
 | Public page shows "Faucet is disabled"        | `amount_per_claim` is `0`. Set it in the admin panel.                                     |
 | Installer says "Already installed"            | Delete `.installed` in the project root to re-run.                                        |
+| `Test RPC` → "SSL: no alternative certificate subject name matches…" | The cert served on 443 isn't yours — a router, hoster gateway, or AV intercepts the port. See [Troubleshooting Pattern C](#troubleshooting-pattern-c-when-port-443-is-already-taken). |
+| `Test RPC` → "Connection closed abruptly"     | Same root cause: something terminates TLS before the request reaches your node. Switch to a non-standard port or a Cloudflare Tunnel. |
 
 ---
 
@@ -572,6 +574,166 @@ VPS in the middle: WireGuard between VPS and node, TLS terminator on the
 VPS, IP-allow the VPS on the node, and the faucet calls the VPS over
 HTTPS. This buys you a fixed IP plus root access for the cost of a coffee
 per month.
+
+### Troubleshooting Pattern C: when port 443 is already taken
+
+You set up Caddy or nginx, your wildcard cert is in place, the node-side
+diagnostic looks fine — but from outside you see a **self-signed
+certificate with `CN=<public-ip>`** (often valid until 2038), and the
+faucet's "Test RPC connection" reports either
+`SSL: no alternative certificate subject name matches…` (TLS verify on)
+or `Connection closed abruptly` (TLS verify off). That means **some
+other device on the path owns port 443** — usually one of:
+
+- a consumer router/modem (FritzBox, Speedport, etc.) with its remote-admin
+  HTTPS interface enabled,
+- a hoster firewall / load-balancer / panel proxy in front of the VM,
+- an antivirus or "web filter" intercepting outbound TLS.
+
+Caddy never sees the request, so no cert configuration on the node side
+can help. Two ways out — pick whichever fits your situation.
+
+#### Option 1 — Serve RPC on a non-standard port (e.g. 8443)
+
+Routers almost never intercept ports other than 80/443. Move Caddy
+off 443 and forward that non-standard port through to the node.
+
+`Caddyfile` on the node host:
+
+```caddyfile
+faucet-node.example.com:8443 {
+    tls C:\caddy\certs\wildcard.crt C:\caddy\certs\wildcard.key
+    @allow remote_ip <webserver-public-ip>
+    reverse_proxy @allow 127.0.0.1:8332
+    respond 403
+}
+```
+
+Reload Caddy and open the firewall:
+
+```powershell
+caddy.exe reload --config C:\caddy\Caddyfile
+New-NetFirewallRule -DisplayName "Caddy 8443" -Direction Inbound -Protocol TCP -LocalPort 8443 -Action Allow
+```
+
+```bash
+# Linux equivalent
+$ sudo systemctl reload caddy
+$ sudo ufw allow 8443/tcp     # or firewall-cmd / iptables, whichever you use
+```
+
+Set a port-forward on your router: external TCP **8443** → LAN IP of the
+node host, internal port **8443**. The router's admin remains untouched on
+443.
+
+Verify from outside that Caddy is now the one answering:
+
+```powershell
+$h = "faucet-node.example.com"
+$tcp = New-Object Net.Sockets.TcpClient($h, 8443)
+$ssl = New-Object Net.Security.SslStream($tcp.GetStream(), $false, {$true})
+$ssl.AuthenticateAsClient($h)
+$cert = New-Object Security.Cryptography.X509Certificates.X509Certificate2($ssl.RemoteCertificate)
+"Subject : $($cert.Subject)"
+"Issuer  : $($cert.Issuer)"
+$tcp.Close()
+```
+
+Expect `Subject : CN=*.example.com` (your wildcard) and an issuer that
+matches your CA — **not** the router's `CN=<public-ip>`.
+
+In the faucet admin set:
+
+| Field    | Value                                              |
+|----------|----------------------------------------------------|
+| RPC host | `https://faucet-node.example.com:8443/`            |
+| RPC port | ignored (the scheme + explicit port win)           |
+
+Leave **Verify TLS certificate** on.
+
+#### Option 2 — Cloudflare Tunnel (no router config needed)
+
+If you can't touch the router (corporate / shared / home behind ISP CGNAT),
+run a Cloudflare Tunnel on the node. It opens an **outbound** connection
+to Cloudflare's edge, so no inbound port-forward is required. Cloudflare
+provides a valid public certificate and routes
+`https://faucet-node.example.com/` to your node over the tunnel.
+
+Prerequisites: a free Cloudflare account with the domain
+`example.com` added as a zone (you point the registrar's nameservers at
+Cloudflare's two NS records).
+
+Install on the node host:
+
+```powershell
+# Windows
+winget install --id Cloudflare.cloudflared
+```
+
+```bash
+# Debian/Ubuntu Linux
+$ curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+$ sudo apt install /tmp/cloudflared.deb
+```
+
+One-time setup:
+
+```powershell
+cloudflared tunnel login
+cloudflared tunnel create faucet-rpc
+cloudflared tunnel route dns faucet-rpc faucet-node.example.com
+```
+
+`tunnel login` opens a browser to authorise the host against a zone.
+`tunnel route dns` automatically creates the right CNAME in your
+Cloudflare DNS.
+
+Write `C:\Users\<you>\.cloudflared\config.yml` (Windows) /
+`/etc/cloudflared/config.yml` (Linux):
+
+```yaml
+tunnel: faucet-rpc
+credentials-file: C:\Users\<you>\.cloudflared\<tunnel-uuid>.json
+
+ingress:
+  - hostname: faucet-node.example.com
+    service: http://localhost:8332
+  - service: http_status:404
+```
+
+Install as a service so it survives reboots:
+
+```powershell
+cloudflared service install
+Start-Service cloudflared
+```
+
+```bash
+$ sudo cloudflared service install
+$ sudo systemctl enable --now cloudflared
+```
+
+In the faucet admin set **RPC host** to `https://faucet-node.example.com/`
+and leave the TLS-verify checkbox on. Cloudflare's edge cert is valid and
+publicly trusted, so verification succeeds out of the box on any
+shared-hosting webserver.
+
+**Lock the door at the Cloudflare edge.** Without an extra rule, anyone
+on the internet with the RPC password can talk to your tunnel. In
+Cloudflare dashboard → **Security → WAF → Custom rules**, add:
+
+- Field: `IP Source Address`
+- Operator: `does not equal`
+- Value: `<webserver-public-ip>`
+- Hostname: equals `faucet-node.example.com`
+- Action: **Block**
+
+That restricts the tunnel to your faucet host only.
+
+**Trade-off to be aware of.** Cloudflare sees the RPC traffic in
+plaintext between its edge and your tunnel (HTTP Basic Auth credentials,
+txids). For a faucet with a small hot wallet this is usually fine; for
+high-value setups prefer Option 1 or one of Patterns A/B.
 
 ### Node on Windows
 
