@@ -1,13 +1,19 @@
-# Block access to anything outside the whitelist
-<FilesMatch "^(?!index\.php|admin\.php|api\.php|install\.php)\.php$">
-    Require all denied
-</FilesMatch>
-
-# Pretty options
-Options -Indexes
 DirectoryIndex index.php
 
-# Static asset cache
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
+
+<FilesMatch "\.(env|log|sql|ini|md|sample|example)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"
     Header set X-Frame-Options "DENY"
