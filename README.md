@@ -296,6 +296,88 @@ verification enabled. Self-signed certificates require their CA to be
 installed in the faucet host's system trust store — there is no setting to
 disable verification.
 
+### Node on Windows
+
+All three patterns work when `elektron-net` runs on a Windows machine.
+Adjust as follows:
+
+**`bitcoin.conf` location.** Typically
+`%APPDATA%\Elektron\bitcoin.conf` (e.g.
+`C:\Users\<you>\AppData\Roaming\Elektron\bitcoin.conf`). Create it if it
+doesn't exist. Use forward slashes or escaped backslashes in any `datadir=`
+line. After editing, restart the node (GUI: File → Exit; CLI: stop the
+service / `elektron-cli stop`).
+
+**Run the node unattended.** Either:
+
+- Use the official Windows installer's "Start with Windows" option, or
+- Install it as a Windows Service with `nssm`:
+
+  ```cmd
+  nssm install ElektronNode "C:\Program Files\Elektron\daemon\elektrond.exe"
+  nssm set ElektronNode AppParameters "-datadir=C:\elektron\data"
+  nssm set ElektronNode Start SERVICE_AUTO_START
+  nssm start ElektronNode
+  ```
+
+**Windows Defender Firewall.** For Pattern A (SSH) open inbound TCP 22.
+For Pattern B (WireGuard) open inbound UDP 51820 (or whatever port you
+chose). For Pattern C (TLS) open inbound TCP 443. Use
+`New-NetFirewallRule` in an elevated PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "OpenSSH" -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow
+```
+
+**Pattern A on Windows — OpenSSH Server.** Windows 10/11 and Server 2019+
+ship with the OpenSSH Server as an optional feature:
+
+```powershell
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+Set-Service -Name sshd -StartupType Automatic
+Start-Service sshd
+```
+
+Create a dedicated local user `faucet` (no admin rights), then put the
+faucet host's public key into `C:\Users\faucet\.ssh\authorized_keys`.
+**The OpenSSH `permitopen` and `command=` restrictions work the same as on
+Linux** — paste the same single-line key entry shown above. Fix permissions
+once:
+
+```powershell
+icacls C:\Users\faucet\.ssh\authorized_keys /inheritance:r /grant "faucet:R" /grant "SYSTEM:F"
+```
+
+In the node's `bitcoin.conf`, keep `rpcbind=127.0.0.1` / `rpcallowip=127.0.0.1`.
+The Linux faucet host's `autossh` systemd unit connects to
+`faucet@windows-node-ip` exactly as in Pattern A above.
+
+**Pattern B on Windows — WireGuard.** Install the official
+[WireGuard for Windows](https://www.wireguard.com/install/) GUI. Paste the
+node-side `[Interface]/[Peer]` config from Pattern B into the GUI's
+"Add Tunnel → Add empty tunnel" dialog. The GUI activates the tunnel as a
+Windows service. In `bitcoin.conf` use the WireGuard interface's address
+(e.g. `rpcbind=10.0.0.2`).
+
+**Pattern C on Windows — TLS terminator.** Three good options, pick one:
+
+- **Caddy for Windows** (easiest; automatic Let's Encrypt). A 3-line
+  `Caddyfile` does it:
+
+  ```
+  node.example.com {
+      @allow remote_ip <faucet-public-ip>
+      reverse_proxy @allow 127.0.0.1:8332
+      respond 403
+  }
+  ```
+
+  Run as a service: `caddy.exe service install`.
+
+- **nginx for Windows** with the same config snippet shown above.
+- **IIS + URL Rewrite + ARR** if you already operate IIS — set up a reverse
+  proxy to `http://127.0.0.1:8332/` and bind a TLS certificate.
+
 ### Hard rules
 
 - **Never** set `rpcallowip=0.0.0.0/0`.
