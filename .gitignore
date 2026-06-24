@@ -1,0 +1,6 @@
+/config.php
+/.installed
+*.log
+.DS_Store
+/vendor/
+/node_modules/
