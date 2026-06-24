@@ -19,7 +19,7 @@ final class RpcClient
 
     public function call(string $method, array $params = []): mixed
     {
-        $url = sprintf('http://%s:%d/', $this->host, $this->port);
+        $url = $this->baseUrl();
         if ($this->wallet !== null && $this->wallet !== '') {
             $url .= 'wallet/' . rawurlencode($this->wallet);
         }
@@ -39,6 +39,8 @@ final class RpcClient
             CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
             CURLOPT_TIMEOUT        => $this->timeout,
             CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout),
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
         ]);
         $resp = curl_exec($ch);
         $errno = curl_errno($ch);
@@ -66,6 +68,30 @@ final class RpcClient
             throw new RpcException((string)$msg, $code);
         }
         return $data['result'] ?? null;
+    }
+
+    /**
+     * Build the base URL. `host` may be:
+     *   - bare host or IP            -> http://host:port/
+     *   - http://host[:port][/path]  -> used as-is (port falls back to $this->port if missing)
+     *   - https://host[:port][/path] -> used as-is (TLS, port falls back to 443 then $this->port)
+     * Trailing slash is guaranteed so wallet/<name> can be appended.
+     */
+    private function baseUrl(): string
+    {
+        $h = trim($this->host);
+        if (preg_match('#^https?://#i', $h)) {
+            $parts = parse_url($h);
+            if ($parts === false || empty($parts['host'])) {
+                throw new \RuntimeException('Invalid RPC URL: ' . $h);
+            }
+            $scheme = strtolower($parts['scheme'] ?? 'http');
+            $port   = $parts['port'] ?? ($scheme === 'https' ? 443 : $this->port);
+            $path   = $parts['path'] ?? '/';
+            if (!str_ends_with($path, '/')) $path .= '/';
+            return sprintf('%s://%s:%d%s', $scheme, $parts['host'], $port, $path);
+        }
+        return sprintf('http://%s:%d/', $h, $this->port);
     }
 }
 

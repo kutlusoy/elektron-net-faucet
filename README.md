@@ -153,6 +153,159 @@ You're live.
 
 ---
 
+## Running the node on a separate host
+
+If the elektron-net node is on a different machine with a fixed IP, **do not
+simply open RPC port 8332 to the internet.** Bitcoin-Core-compatible RPC sends
+credentials with HTTP Basic Auth, in cleartext, and has no rate-limit of its
+own. Use one of the three patterns below; they cover essentially every
+deployment.
+
+### Pattern A — SSH reverse tunnel (recommended for most operators)
+
+The node keeps `rpcbind=127.0.0.1` (never exposed to the internet). The faucet
+host opens a persistent SSH tunnel and reaches RPC locally on, say,
+`127.0.0.1:18332`.
+
+On the **node host** (`bitcoin.conf` unchanged from a standard install):
+
+```ini
+server=1
+rpcbind=127.0.0.1
+rpcallowip=127.0.0.1
+rpcuser=faucetuser
+rpcpassword=<long-random>
+```
+
+Create a dedicated UNIX user `faucet` on the node host and add the faucet
+server's SSH public key to `/home/faucet/.ssh/authorized_keys` with strict
+restrictions — port-forward only, no shell, no PTY:
+
+```
+command="echo no-shell allowed",no-pty,no-X11-forwarding,permitopen="127.0.0.1:8332" ssh-ed25519 AAAA... faucet@web-server
+```
+
+On the **faucet host**, install `autossh` and add a systemd unit:
+
+```ini
+# /etc/systemd/system/elek-rpc-tunnel.service
+[Unit]
+Description=SSH tunnel to elektron-net RPC
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=www-data
+Environment=AUTOSSH_GATETIME=0
+ExecStart=/usr/bin/autossh -M 0 -N \
+  -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+  -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new \
+  -L 127.0.0.1:18332:127.0.0.1:8332 \
+  -i /etc/elek-faucet/id_ed25519 \
+  faucet@node.example.com
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then in the faucet admin panel set `RPC host = 127.0.0.1`,
+`RPC port = 18332`. No code changes needed.
+
+### Pattern B — WireGuard / Tailscale
+
+Both hosts join a private overlay network. The node binds RPC to the private
+interface (e.g. `10.0.0.2:8332`); only the faucet host's private IP is
+allowed.
+
+Node `bitcoin.conf`:
+
+```ini
+server=1
+rpcbind=127.0.0.1
+rpcbind=10.0.0.2
+rpcallowip=127.0.0.1
+rpcallowip=10.0.0.1/32
+rpcuser=faucetuser
+rpcpassword=<long-random>
+```
+
+Minimal `wg0.conf` on the node:
+
+```ini
+[Interface]
+Address = 10.0.0.2/24
+ListenPort = 51820
+PrivateKey = <node-private>
+
+[Peer]
+PublicKey = <faucet-public>
+AllowedIPs = 10.0.0.1/32
+```
+
+And on the faucet host:
+
+```ini
+[Interface]
+Address = 10.0.0.1/24
+PrivateKey = <faucet-private>
+
+[Peer]
+PublicKey = <node-public>
+Endpoint = node.example.com:51820
+AllowedIPs = 10.0.0.2/32
+PersistentKeepalive = 25
+```
+
+In the admin panel: `RPC host = 10.0.0.2`, `RPC port = 8332`.
+Lower latency than SSH if you do many RPC calls per minute. With Tailscale,
+the setup is even simpler — `tailscale up` on both hosts and use the
+auto-assigned `100.x.y.z` addresses.
+
+### Pattern C — TLS terminator (when A and B aren't available)
+
+If you cannot run a tunnel (e.g. managed PaaS, multiple faucet hosts behind a
+CDN that needs to reach the node), put a TLS terminator in front of the node
+RPC with a valid certificate and either client-certificate auth or strict IP
+allow-listing.
+
+nginx snippet on the node host:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name node.example.com;
+    ssl_certificate     /etc/letsencrypt/live/node.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/node.example.com/privkey.pem;
+
+    allow <faucet-public-ip>/32;
+    deny all;
+
+    location / {
+        proxy_pass http://127.0.0.1:8332/;
+        proxy_set_header Host $host;
+        proxy_read_timeout 60s;
+    }
+}
+```
+
+In the admin panel, set `RPC host = https://node.example.com/`. The faucet's
+`RpcClient` recognises the `https://` prefix and uses TLS with peer
+verification enabled. Self-signed certificates require their CA to be
+installed in the faucet host's system trust store — there is no setting to
+disable verification.
+
+### Hard rules
+
+- **Never** set `rpcallowip=0.0.0.0/0`.
+- **Never** run Bitcoin-Core-style RPC over plain HTTP across the internet.
+- Use a strong, randomly-generated `rpcpassword`. RPC credentials still
+  matter even with the tunnel — they're a defence-in-depth layer.
+- Keep the hot wallet small. Top it up from a cold wallet as needed.
+
+---
+
 ## How the no-private-key approach works
 
 You asked: *"I don't want to enter a private key anywhere — is there another
