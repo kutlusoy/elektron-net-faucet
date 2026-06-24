@@ -72,7 +72,7 @@ return [
     'set.ip_cooldown'           => 'Cooldown por IP (horas)',
     'set.explorer_url'          => 'Prefixo URL do explorador',
     'set.default_lang'          => 'Idioma padrão',
-    'set.rpc_host'              => 'Host RPC',
+    'set.rpc_host'              => 'Host RPC (hostname, IP ou URL completa http(s)://… — para nós remotos usa SSH tunnel ou WireGuard)',
     'set.rpc_port'              => 'Porta RPC',
     'set.rpc_user'              => 'Utilizador RPC',
     'set.rpc_pass'              => 'Senha RPC (vazio = manter)',

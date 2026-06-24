@@ -72,7 +72,7 @@ return [
     'set.ip_cooldown'           => 'Cooldown par IP (heures)',
     'set.explorer_url'          => 'Préfixe URL explorateur (txid ajouté)',
     'set.default_lang'          => 'Langue par défaut',
-    'set.rpc_host'              => 'Hôte RPC',
+    'set.rpc_host'              => 'Hôte RPC (nom d\'hôte, IP ou URL complète http(s)://… — pour les nœuds distants utilise un tunnel SSH ou WireGuard)',
     'set.rpc_port'              => 'Port RPC',
     'set.rpc_user'              => 'Utilisateur RPC',
     'set.rpc_pass'              => 'Mot de passe RPC (vide = inchangé)',
