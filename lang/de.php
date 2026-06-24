@@ -79,6 +79,8 @@ return [
     'set.wallet_name'           => 'Wallet-Name (für /wallet/<name> Endpunkt; leer für default)',
     'set.wallet_pass'           => 'Wallet-Passphrase (leer = unverändert)',
     'set.sender_addr'           => 'Absender-Adresse (Anzeige; sendtoaddress wählt UTXOs automatisch)',
+    'set.tls_verify'            => 'TLS-Zertifikat verifizieren (empfohlen)',
+    'set.tls_verify_warn'       => '⚠ Nur ausschalten wenn der Node über ein privates Netz erreichbar ist (VPN, WireGuard, SSH-Tunnel) oder ein selbst-signiertes Cert deiner eigenen CA verwendet wird. Bei öffentlicher Verbindung wird das RPC-Passwort lesbar und jeder im Pfad kann sich als Node ausgeben.',
     'set.captcha_site'          => 'Site Key',
     'set.captcha_secret'        => 'Secret Key (leer = unverändert)',
     'set.save'                  => 'Speichern',

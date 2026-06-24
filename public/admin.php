@@ -87,6 +87,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 Db::setSetting($f, trim((string)$_POST[$f]));
             }
         }
+        Db::setSetting('rpc_tls_verify', empty($_POST['rpc_tls_verify']) ? '0' : '1');
         if (!empty($_POST['rpc_pass'])) {
             Db::setSetting('rpc_pass_enc', Crypto::encrypt((string)$_POST['rpc_pass'], 'rpc_pass'));
         }
@@ -263,6 +264,11 @@ $explorer = $s['explorer_url'] ?? '';
         <label><?= he('set.wallet_name') ?><input type="text" name="wallet_name" value="<?= h($s['wallet_name'] ?? '') ?>"></label>
         <label><?= he('set.wallet_pass') ?><input type="password" name="wallet_pass" autocomplete="new-password"></label>
         <label><?= he('set.sender_addr') ?><input type="text" name="sender_addr" value="<?= h($s['sender_addr'] ?? '') ?>" placeholder="be1q…"></label>
+        <label class="checkbox-label">
+          <input type="checkbox" name="rpc_tls_verify" value="1" <?= ($s['rpc_tls_verify'] ?? '1') !== '0' ? 'checked' : '' ?>>
+          <?= he('set.tls_verify') ?>
+        </label>
+        <p class="hint warn"><?= he('set.tls_verify_warn') ?></p>
       </fieldset>
 
       <fieldset><legend><?= he('sec.captcha') ?></legend>

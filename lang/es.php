@@ -79,6 +79,8 @@ return [
     'set.wallet_name'           => 'Nombre de wallet (vacío para default)',
     'set.wallet_pass'           => 'Frase de wallet (vacío = mantener)',
     'set.sender_addr'           => 'Dirección remitente (informativa)',
+    'set.tls_verify'            => 'Verificar certificado TLS (recomendado)',
+    'set.tls_verify_warn'       => '⚠ Desactiva sólo para nodos accesibles a través de una red privada (VPN, WireGuard, túnel SSH) o con un certificado autofirmado de tu propia CA.',
     'set.captcha_site'          => 'Site key',
     'set.captcha_secret'        => 'Secret key (vacío = mantener)',
     'set.save'                  => 'Guardar',

@@ -21,7 +21,13 @@ final class Wallet
         $passEnc = $s['rpc_pass_enc'] ?? '';
         $pass = $passEnc !== '' ? Crypto::decrypt($passEnc, 'rpc_pass') : '';
         $wallet = $s['wallet_name'] ?? '';
-        return new self(new RpcClient($host, $port, $user, $pass, $wallet === '' ? null : $wallet));
+        $verify = ($s['rpc_tls_verify'] ?? '1') !== '0';
+        return new self(new RpcClient(
+            $host, $port, $user, $pass,
+            $wallet === '' ? null : $wallet,
+            30,
+            $verify
+        ));
     }
 
     public function rpc(): RpcClient

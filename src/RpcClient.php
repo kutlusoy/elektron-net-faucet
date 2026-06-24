@@ -15,6 +15,7 @@ final class RpcClient
         private string $pass,
         private ?string $wallet = null,
         private int $timeout = 30,
+        private bool $verifyTls = true,
     ) {}
 
     public function call(string $method, array $params = []): mixed
@@ -39,8 +40,8 @@ final class RpcClient
             CURLOPT_HTTPHEADER     => ['Content-Type: application/json'],
             CURLOPT_TIMEOUT        => $this->timeout,
             CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout),
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_SSL_VERIFYPEER => $this->verifyTls,
+            CURLOPT_SSL_VERIFYHOST => $this->verifyTls ? 2 : 0,
         ]);
         $resp = curl_exec($ch);
         $errno = curl_errno($ch);
