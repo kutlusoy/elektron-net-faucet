@@ -459,8 +459,25 @@ async function ajaxPost(data, btn) {
   try {
     const fd = data instanceof FormData ? data
       : (() => { const f = new FormData(); Object.entries(data).forEach(([k,v]) => f.set(k,v)); return f; })();
-    const res = await fetch('admin.php', { method:'POST', body:fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
+    const res = await fetch('admin.php', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+    });
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      const body = await res.text();
+      if (/name="username"|name=\"password\"|action=login/i.test(body)) {
+        showToast('Admin session expired. Reload the page and log in again.', false);
+        return { ok: false, msg: 'Session expired' };
+      }
+      throw new Error('HTTP ' + res.status + ' (non-JSON): ' + body.slice(0, 200));
+    }
     return await res.json();
+  } catch (e) {
+    showToast('Request failed: ' + (e && e.message ? e.message : e), false);
+    return { ok: false, msg: (e && e.message) ? e.message : String(e) };
   } finally { if (btn) setLoading(btn, false); }
 }
 
@@ -494,8 +511,24 @@ async function runTest(btn) {
     const fd = new FormData();
     fd.set('action', btn.dataset.action);
     fd.set('csrf', CSRF);
-    const res  = await fetch('admin.php', { method:'POST', body:fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
-    const data = await res.json();
+    const res = await fetch('admin.php', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+    });
+    const ct = res.headers.get('content-type') || '';
+    let data;
+    if (!ct.includes('application/json')) {
+      const body = await res.text();
+      if (/name="username"|name=\"password\"|action=login/i.test(body)) {
+        data = { ok: false, msg: 'Admin session expired. Reload the page and log in again.' };
+      } else {
+        data = { ok: false, msg: 'HTTP ' + res.status + ' (non-JSON): ' + body.slice(0, 200) };
+      }
+    } else {
+      data = await res.json();
+    }
     const state = data.ok ? 'ok' : 'err';
     setBtnState(btn, state);
     setMsgState(msgEl, state, data.msg || (data.ok ? 'OK' : 'Error'));
@@ -541,6 +574,26 @@ document.querySelectorAll('.btn-drop').forEach(btn => {
 document.getElementById('btn-optimize').addEventListener('click', async function() {
   const d = await ajaxPost({ action:'optimize_tables', csrf:this.dataset.csrf }, this);
   showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok?'Done':'Error'));
+});
+</script>
+
+<script>
+/* startos-patched-ajax-handlers */
+window.addEventListener("unhandledrejection", function(e) {
+  var msg = (e && e.reason && (e.reason.message || String(e.reason))) || "Unknown error";
+  var toast = document.getElementById("toast");
+  if (toast) {
+    toast.textContent = "Background error: " + msg;
+    toast.className = "toast err";
+    toast.hidden = false;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function() { toast.hidden = true; }, 6000);
+  } else {
+    console.error("admin unhandledrejection:", msg);
+  }
+});
+window.addEventListener("error", function(e) {
+  console.error("admin error:", e.error || e.message);
 });
 </script>
 </body></html>
