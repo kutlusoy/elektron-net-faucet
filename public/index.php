@@ -45,12 +45,14 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 <header class="page-header">
   <a href="index.php" class="site-logo" aria-label="<?= h($title) ?>">
     <img src="assets/logo.svg" alt="" width="64" height="64">
-    <span class="site-name"><?= h($title) ?></span>
   </a>
-  <div class="lang-switch">
-    <?php foreach (I18n::LOCALES as $code => $name): ?>
-      <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
-    <?php endforeach; ?>
+  <h1 class="site-name"><?= h($title) ?></h1>
+  <div class="header-nav">
+    <div class="lang-switch">
+      <?php foreach (I18n::LOCALES as $code => $name): ?>
+        <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
+      <?php endforeach; ?>
+    </div>
   </div>
 </header>
 
@@ -102,12 +104,17 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
     </div>
   </div>
 
-  <div class="pay-box">
-    <p class="pay-box-title"><?= he('donate.instruction_title') ?></p>
+  <p class="donate-hint"><?= he('donate.uri_hint') ?></p>
+
+  <div class="uri-box">
+    <span class="uri-box-content" id="pay-uri">elek:<?= h($faucetAddr) ?>?amount=1.00000000&amp;label=Faucet%20Donation</span>
+    <button type="button" class="btn-copy" id="btn-copy-uri"><?= he('donate.copy_uri') ?></button>
+  </div>
+
+  <div class="pay-info">
     <div class="pi-row">
       <span class="pi-label"><?= he('donate.pi_address') ?></span>
-      <span class="pi-value mono" id="pi-addr"><?= h($faucetAddr) ?></span>
-      <button type="button" class="btn-copy" id="btn-copy-addr"><?= he('donate.copy') ?></button>
+      <span class="pi-value mono"><?= h($faucetAddr) ?></span>
     </div>
     <div class="pi-row">
       <span class="pi-label"><?= he('donate.pi_amount') ?></span>
@@ -116,11 +123,9 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
     <div class="pi-row">
       <span class="pi-label"><?= he('donate.pi_memo') ?></span>
       <span class="pi-value" id="pi-memo">Faucet Donation</span>
-      <button type="button" class="btn-copy" id="btn-copy-memo"><?= he('donate.copy') ?></button>
     </div>
   </div>
 
-  <p class="donate-hint"><?= he('donate.hint') ?></p>
   <p class="donate-donors-link"><a href="donors.php"><?= he('donate.donors_link') ?></a></p>
 </section>
 <?php endif; ?>
@@ -177,19 +182,29 @@ document.getElementById('claim-form').addEventListener('submit', async (e) => {
   finally  { setLoading(btn, false); }
 });
 
-// ── Payment instruction ──
-function updateInstruction() {
-  const amt  = parseFloat(document.getElementById('donate-amount')?.value || '1') || 1;
-  const name = (document.getElementById('donor-name')?.value || '').trim();
-  const memo = 'Faucet Donation' + (name ? ' ' + name : '');
-  const el = document.getElementById('pi-amount');
-  const em = document.getElementById('pi-memo');
-  if (el) el.textContent = amt.toFixed(8) + ' ELEK';
-  if (em) em.textContent = memo;
+// ── Payment URI generator ──
+function buildPayUri() {
+  if (!faucetAddr) return '';
+  const amtRaw = parseFloat(document.getElementById('donate-amount')?.value || '1');
+  const amt    = (Number.isFinite(amtRaw) && amtRaw > 0) ? amtRaw : 1;
+  const name   = (document.getElementById('donor-name')?.value || '').trim();
+  const label  = 'Faucet Donation' + (name ? ' ' + name : '');
+  return 'elek:' + faucetAddr
+       + '?amount=' + amt.toFixed(8)
+       + '&label='  + encodeURIComponent(label);
 }
-document.getElementById('donate-amount')?.addEventListener('input', updateInstruction);
-document.getElementById('donor-name')?.addEventListener('input', updateInstruction);
-updateInstruction();
+function refreshPayment() {
+  const amtRaw = parseFloat(document.getElementById('donate-amount')?.value || '1');
+  const amt    = (Number.isFinite(amtRaw) && amtRaw > 0) ? amtRaw : 1;
+  const name   = (document.getElementById('donor-name')?.value || '').trim();
+  const memo   = 'Faucet Donation' + (name ? ' ' + name : '');
+  const ea = document.getElementById('pi-amount'); if (ea) ea.textContent = amt.toFixed(8) + ' ELEK';
+  const em = document.getElementById('pi-memo');   if (em) em.textContent = memo;
+  const eu = document.getElementById('pay-uri');   if (eu) eu.textContent = buildPayUri();
+}
+document.getElementById('donate-amount')?.addEventListener('input', refreshPayment);
+document.getElementById('donor-name')?.addEventListener('input', refreshPayment);
+refreshPayment();
 
 function copyText(text, btn) {
   const origText = btn.textContent;
@@ -200,14 +215,12 @@ function copyText(text, btn) {
     ta.value = text; document.body.appendChild(ta); ta.select();
     document.execCommand('copy'); document.body.removeChild(ta);
   }
-  btn.textContent = '✓'; btn.classList.add('copied');
+  btn.textContent = '✓ ' + origText;
+  btn.classList.add('copied');
   setTimeout(() => { btn.textContent = origText; btn.classList.remove('copied'); }, 1500);
 }
-document.getElementById('btn-copy-addr')?.addEventListener('click', function() {
-  copyText(faucetAddr, this);
-});
-document.getElementById('btn-copy-memo')?.addEventListener('click', function() {
-  copyText(document.getElementById('pi-memo')?.textContent || '', this);
+document.getElementById('btn-copy-uri')?.addEventListener('click', function() {
+  copyText(buildPayUri(), this);
 });
 </script>
 </body>

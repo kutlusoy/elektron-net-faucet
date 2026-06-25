@@ -49,20 +49,22 @@ if ($sess === null) { ?>
 <link rel="stylesheet" href="assets/style.css">
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
 </head><body class="admin">
-<div class="page admin">
-  <header class="page-header admin-header">
-    <a href="index.php" class="site-logo">
-      <img src="assets/logo.svg" alt="" width="38" height="38">
-      <span class="site-name"><?= h($siteTitle) ?></span>
+<div class="page">
+  <header class="page-header">
+    <a href="index.php" class="site-logo" aria-label="<?= h($siteTitle) ?>">
+      <img src="assets/logo.svg" alt="" width="64" height="64">
     </a>
-    <div class="lang-switch">
-      <?php foreach (I18n::LOCALES as $code => $name): ?>
-        <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
-      <?php endforeach; ?>
+    <h1 class="site-name"><?= h($siteTitle) ?></h1>
+    <div class="header-nav">
+      <div class="lang-switch">
+        <?php foreach (I18n::LOCALES as $code => $name): ?>
+          <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
+        <?php endforeach; ?>
+      </div>
     </div>
   </header>
   <main class="card">
-    <h1><?= he('admin.login') ?></h1>
+    <h2><?= he('admin.login') ?></h2>
     <?php if ($loginError): ?><div class="result err"><?= h($loginError) ?></div><?php endif; ?>
     <form method="post" autocomplete="off">
       <input type="hidden" name="action" value="login">
@@ -77,7 +79,6 @@ if ($sess === null) { ?>
 $adminId = (int)$sess['admin_id'];
 $isAjax  = (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest');
 
-// ── AJAX stats ──
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'stats') {
     header('Content-Type: application/json');
     $wb = null; $we = null;
@@ -93,14 +94,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'stats') {
     exit;
 }
 
-// ── AJAX claims ──
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'claims') {
     header('Content-Type: application/json');
     echo json_encode(Stats::recentClaims(50));
     exit;
 }
 
-// ── POST actions ──
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!Csrf::check((string)($_POST['csrf'] ?? ''))) {
         if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'error'=>'CSRF']); exit; }
@@ -165,10 +164,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
     }
 
-    // ── DB maintenance ──
     if ($action === 'drop_table') {
-        $table = (string)($_POST['table'] ?? '');
-        // Only allow dropping known legacy tables
+        $table   = (string)($_POST['table'] ?? '');
         $allowed = ['donations'];
         $safe = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
         if ($safe !== $table || !in_array($safe, $allowed, true)) {
@@ -198,14 +195,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
-// ── Render ──
-$csrf           = Csrf::token();
-$totalSentSat   = Stats::totalSentSat();
-$totalCount     = Stats::totalSentCount();
-$dailySat       = Stats::spentLastDaySat();
-$hourlySat      = Stats::spentLastHourSat();
-$dailyBudgetSat = RateLimiter::elekToSat($s['daily_budget']  ?? '0');
-$hourlyBudgetSat= RateLimiter::elekToSat($s['hourly_budget'] ?? '0');
+$csrf            = Csrf::token();
+$totalSentSat    = Stats::totalSentSat();
+$totalCount      = Stats::totalSentCount();
+$dailySat        = Stats::spentLastDaySat();
+$hourlySat       = Stats::spentLastHourSat();
+$dailyBudgetSat  = RateLimiter::elekToSat($s['daily_budget']  ?? '0');
+$hourlyBudgetSat = RateLimiter::elekToSat($s['hourly_budget'] ?? '0');
 
 $walletBalance = null; $walletError = null;
 try { $walletBalance = Wallet::fromSettings()->getBalance(); }
@@ -215,7 +211,6 @@ $claims    = Stats::recentClaims(50);
 $histogram = Stats::last24hHistogram();
 $explorer  = $s['explorer_url'] ?? '';
 
-// DB table info for maintenance section
 $activeTables = ['settings','admin_users','claims','audit_log','sessions','login_attempts'];
 $legacyTables = ['donations'];
 $dbTableInfo  = Db::getTableInfo();
@@ -230,215 +225,207 @@ $dbTableInfo  = Db::getTableInfo();
 
 <div class="page admin">
 
-<header class="page-header admin-header">
-  <a href="index.php" class="site-logo">
-    <img src="assets/logo.svg" alt="" width="38" height="38">
-    <span class="site-name"><?= h($siteTitle) ?></span>
+<header class="page-header">
+  <a href="index.php" class="site-logo" aria-label="<?= h($siteTitle) ?>">
+    <img src="assets/logo.svg" alt="" width="64" height="64">
   </a>
-  <nav class="admin-nav">
-    <span class="lang-switch">
+  <h1 class="site-name"><?= h($siteTitle) ?></h1>
+  <div class="header-nav">
+    <div class="lang-switch">
       <?php foreach (I18n::LOCALES as $code => $name): ?>
         <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
       <?php endforeach; ?>
-    </span>
+    </div>
     <span class="admin-badge"><?= he('admin.title') ?></span>
     <a href="?action=logout" class="logout-link"><?= he('admin.logout') ?></a>
-  </nav>
+  </div>
 </header>
 
 <div id="toast" class="toast" hidden></div>
 
-<div class="admin-main">
-
-  <!-- KPIs -->
-  <div class="stats" id="stats-section">
-    <div class="kpi">
-      <div class="label"><?= he('kpi.total_given') ?></div>
-      <div class="value" id="v-total"><?= h(RateLimiter::satToElek($totalSentSat)) ?> ELEK</div>
-      <div class="sub"   id="s-total"><?= he('kpi.payouts', ['count' => $totalCount]) ?></div>
-    </div>
-    <div class="kpi">
-      <div class="label"><?= he('kpi.today') ?></div>
-      <div class="value" id="v-daily"><?= h(RateLimiter::satToElek($dailySat)) ?> ELEK</div>
-      <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($dailyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$dailyBudgetSat-$dailySat)))]) ?></div>
-    </div>
-    <div class="kpi">
-      <div class="label"><?= he('kpi.this_hour') ?></div>
-      <div class="value" id="v-hourly"><?= h(RateLimiter::satToElek($hourlySat)) ?> ELEK</div>
-      <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($hourlyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$hourlyBudgetSat-$hourlySat)))]) ?></div>
-    </div>
-    <div class="kpi">
-      <div class="label"><?= he('kpi.wallet_balance') ?></div>
-      <div class="value" id="v-wallet"><?= $walletBalance !== null ? h($walletBalance).' ELEK' : '&mdash;' ?></div>
-      <div class="sub"><?= $walletError ? h($walletError) : he('kpi.via_getbalance') ?></div>
-    </div>
+<div class="stats" id="stats-section">
+  <div class="kpi">
+    <div class="label"><?= he('kpi.total_given') ?></div>
+    <div class="value" id="v-total"><?= h(RateLimiter::satToElek($totalSentSat)) ?> ELEK</div>
+    <div class="sub"   id="s-total"><?= he('kpi.payouts', ['count' => $totalCount]) ?></div>
   </div>
+  <div class="kpi">
+    <div class="label"><?= he('kpi.today') ?></div>
+    <div class="value" id="v-daily"><?= h(RateLimiter::satToElek($dailySat)) ?> ELEK</div>
+    <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($dailyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$dailyBudgetSat-$dailySat)))]) ?></div>
+  </div>
+  <div class="kpi">
+    <div class="label"><?= he('kpi.this_hour') ?></div>
+    <div class="value" id="v-hourly"><?= h(RateLimiter::satToElek($hourlySat)) ?> ELEK</div>
+    <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($hourlyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$hourlyBudgetSat-$hourlySat)))]) ?></div>
+  </div>
+  <div class="kpi">
+    <div class="label"><?= he('kpi.wallet_balance') ?></div>
+    <div class="value" id="v-wallet"><?= $walletBalance !== null ? h($walletBalance).' ELEK' : '&mdash;' ?></div>
+    <div class="sub"><?= $walletError ? h($walletError) : he('kpi.via_getbalance') ?></div>
+  </div>
+</div>
 
-  <!-- 24h histogram -->
-  <section>
-    <h2><?= he('sec.last_24h') ?></h2>
+<section>
+  <h2><?= he('sec.last_24h') ?></h2>
+  <table>
+    <thead><tr><th><?= he('tbl.hour') ?></th><th><?= he('tbl.payouts') ?></th><th><?= he('tbl.elek') ?></th></tr></thead>
+    <tbody>
+      <?php foreach ($histogram as $h1): ?>
+        <tr><td><?= h($h1['hour']) ?></td><td><?= (int)$h1['count'] ?></td><td><?= h(RateLimiter::satToElek($h1['sat'])) ?></td></tr>
+      <?php endforeach; ?>
+      <?php if (empty($histogram)): ?><tr><td colspan="3"><?= he('tbl.no_data') ?></td></tr><?php endif; ?>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2><?= he('sec.recent_claims') ?></h2>
+  <div class="table-scroll">
     <table>
-      <thead><tr><th><?= he('tbl.hour') ?></th><th><?= he('tbl.payouts') ?></th><th><?= he('tbl.elek') ?></th></tr></thead>
-      <tbody>
-        <?php foreach ($histogram as $h1): ?>
-          <tr><td><?= h($h1['hour']) ?></td><td><?= (int)$h1['count'] ?></td><td><?= h(RateLimiter::satToElek($h1['sat'])) ?></td></tr>
+      <thead><tr>
+        <th><?= he('tbl.id') ?></th><th><?= he('tbl.time') ?></th>
+        <th><?= he('tbl.address') ?></th><th><?= he('tbl.amount') ?></th>
+        <th><?= he('tbl.status') ?></th><th><?= he('tbl.tx') ?></th>
+      </tr></thead>
+      <tbody id="claims-body">
+        <?php foreach ($claims as $c): ?>
+        <tr>
+          <td><?= (int)$c['id'] ?></td>
+          <td><?= h((string)$c['created_at']) ?></td>
+          <td class="mono"><?= h((string)$c['address']) ?></td>
+          <td><?= h(RateLimiter::satToElek((int)$c['amount_satoshi'])) ?></td>
+          <td class="status-<?= h((string)$c['status']) ?>"><?= h((string)$c['status']) ?></td>
+          <td class="mono">
+            <?php if (!empty($c['txid']) && $explorer): ?>
+              <a target="_blank" rel="noopener" href="<?= h($explorer.$c['txid']) ?>"><?= h(substr((string)$c['txid'],0,12)) ?>&hellip;</a>
+            <?php elseif (!empty($c['txid'])): ?>
+              <?= h(substr((string)$c['txid'],0,12)) ?>&hellip;
+            <?php elseif (!empty($c['error'])): ?>
+              <span class="err-text" title="<?= h((string)$c['error']) ?>"><?= h(mb_substr((string)$c['error'],0,60)) ?></span>
+            <?php endif; ?>
+          </td>
+        </tr>
         <?php endforeach; ?>
-        <?php if (empty($histogram)): ?><tr><td colspan="3"><?= he('tbl.no_data') ?></td></tr><?php endif; ?>
       </tbody>
     </table>
-  </section>
+  </div>
+</section>
 
-  <!-- Recent claims -->
-  <section>
-    <h2><?= he('sec.recent_claims') ?></h2>
-    <div class="table-scroll">
-      <table>
-        <thead><tr>
-          <th><?= he('tbl.id') ?></th><th><?= he('tbl.time') ?></th>
-          <th><?= he('tbl.address') ?></th><th><?= he('tbl.amount') ?></th>
-          <th><?= he('tbl.status') ?></th><th><?= he('tbl.tx') ?></th>
-        </tr></thead>
-        <tbody id="claims-body">
-          <?php foreach ($claims as $c): ?>
-          <tr>
-            <td><?= (int)$c['id'] ?></td>
-            <td><?= h((string)$c['created_at']) ?></td>
-            <td class="mono"><?= h((string)$c['address']) ?></td>
-            <td><?= h(RateLimiter::satToElek((int)$c['amount_satoshi'])) ?></td>
-            <td class="status-<?= h((string)$c['status']) ?>"><?= h((string)$c['status']) ?></td>
-            <td class="mono">
-              <?php if (!empty($c['txid']) && $explorer): ?>
-                <a target="_blank" rel="noopener" href="<?= h($explorer.$c['txid']) ?>"><?= h(substr((string)$c['txid'],0,12)) ?>&hellip;</a>
-              <?php elseif (!empty($c['txid'])): ?>
-                <?= h(substr((string)$c['txid'],0,12)) ?>&hellip;
-              <?php elseif (!empty($c['error'])): ?>
-                <span class="err-text" title="<?= h((string)$c['error']) ?>"><?= h(mb_substr((string)$c['error'],0,60)) ?></span>
-              <?php endif; ?>
-            </td>
-          </tr>
+<section>
+  <h2><?= he('sec.settings') ?></h2>
+  <form id="settings-form" method="post">
+    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+    <input type="hidden" name="action" value="save_settings">
+
+    <fieldset><legend><?= he('sec.faucet') ?></legend>
+      <label><?= he('set.title') ?><input type="text" name="faucet_title" value="<?= h($s['faucet_title'] ?? 'Elektron Net Faucet') ?>"></label>
+      <label><?= he('set.welcome_text') ?><textarea name="faucet_message" rows="2"><?= h($s['faucet_message'] ?? '') ?></textarea></label>
+      <label><?= he('set.amount_per_claim') ?><input type="text" name="amount_elek" value="<?= h($s['amount_elek'] ?? '0.001') ?>" required></label>
+      <label><?= he('set.daily_budget') ?><input type="text" name="daily_budget" value="<?= h($s['daily_budget'] ?? '0') ?>"></label>
+      <label><?= he('set.hourly_budget') ?><input type="text" name="hourly_budget" value="<?= h($s['hourly_budget'] ?? '0') ?>"></label>
+      <label><?= he('set.addr_cooldown') ?><input type="number" name="per_addr_cooldown_h" min="0" value="<?= h($s['per_addr_cooldown_h'] ?? '24') ?>"></label>
+      <label><?= he('set.ip_cooldown') ?><input type="number" name="per_ip_cooldown_h" min="0" value="<?= h($s['per_ip_cooldown_h'] ?? '1') ?>"></label>
+      <label><?= he('set.explorer_url') ?><input type="text" name="explorer_url" value="<?= h($s['explorer_url'] ?? '') ?>"></label>
+      <label><?= he('set.default_lang') ?>
+        <select name="default_lang">
+          <?php foreach (I18n::LOCALES as $code => $name): ?>
+            <option value="<?= h($code) ?>" <?= ($s['default_lang'] ?? 'en') === $code ? 'selected' : '' ?>><?= h($name) ?> (<?= h($code) ?>)</option>
           <?php endforeach; ?>
-        </tbody>
-      </table>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset><legend><?= he('sec.rpc') ?></legend>
+      <label><?= he('set.rpc_host') ?><input type="text" name="rpc_host" value="<?= h($s['rpc_host'] ?? '127.0.0.1') ?>" required></label>
+      <label><?= he('set.rpc_port') ?><input type="number" name="rpc_port" value="<?= h($s['rpc_port'] ?? '8332') ?>"></label>
+      <label><?= he('set.rpc_user') ?><input type="text" name="rpc_user" value="<?= h($s['rpc_user'] ?? '') ?>"></label>
+      <label><?= he('set.rpc_pass') ?><input type="password" name="rpc_pass" autocomplete="new-password"></label>
+      <label><?= he('set.wallet_name') ?><input type="text" name="wallet_name" value="<?= h($s['wallet_name'] ?? '') ?>"></label>
+      <label><?= he('set.wallet_pass') ?><input type="password" name="wallet_pass" autocomplete="new-password"></label>
+      <label><?= he('set.sender_addr') ?><input type="text" name="sender_addr" value="<?= h($s['sender_addr'] ?? '') ?>" placeholder="be1q&hellip;"></label>
+      <label class="checkbox-label">
+        <input type="checkbox" name="rpc_tls_verify" value="1" <?= ($s['rpc_tls_verify'] ?? '1') !== '0' ? 'checked' : '' ?>>
+        <?= he('set.tls_verify') ?>
+      </label>
+      <p class="hint warn"><?= he('set.tls_verify_warn') ?></p>
+    </fieldset>
+
+    <fieldset><legend><?= he('sec.captcha') ?></legend>
+      <label><?= he('set.captcha_site') ?><input type="text" name="hcaptcha_site" value="<?= h($s['hcaptcha_site'] ?? '') ?>"></label>
+      <label><?= he('set.captcha_secret') ?><input type="password" name="hcaptcha_secret" autocomplete="new-password"></label>
+    </fieldset>
+
+    <button type="submit" id="save-btn"><?= he('set.save') ?></button>
+  </form>
+
+  <div class="inline-actions">
+    <button id="btn-test-rpc"><?= he('set.test_rpc') ?></button>
+    <button id="btn-test-unlock"><?= he('set.test_unlock') ?></button>
+  </div>
+  <div id="rpc-result" class="result" hidden></div>
+
+  <div class="pw-section">
+    <label><?= he('set.new_admin_pass') ?></label>
+    <div class="pw-row">
+      <input id="new-pw" type="password" autocomplete="new-password" minlength="10">
+      <button id="btn-change-pw"><?= he('set.change_pw') ?></button>
     </div>
-  </section>
+    <div id="pw-result" class="result" hidden></div>
+  </div>
+</section>
 
-  <!-- Settings -->
-  <section>
-    <h2><?= he('sec.settings') ?></h2>
-    <form id="settings-form" method="post">
-      <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-      <input type="hidden" name="action" value="save_settings">
+<section id="sec-db-maint">
+  <h2><?= he('admin.db_maint') ?></h2>
+  <?php if (!empty($dbTableInfo)): ?>
+  <div class="table-scroll">
+    <table>
+      <thead><tr>
+        <th><?= he('admin.db_col_table') ?></th>
+        <th><?= he('admin.db_col_rows') ?></th>
+        <th><?= he('admin.db_col_size') ?></th>
+        <th><?= he('admin.db_col_status') ?></th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+      <?php foreach ($dbTableInfo as $t): ?>
+        <?php
+          $tName    = (string)$t['TABLE_NAME'];
+          $isLegacy = in_array($tName, $legacyTables, true);
+          $isActive = in_array($tName, $activeTables, true);
+          $kb       = round((int)$t['total_bytes'] / 1024, 1);
+        ?>
+        <tr id="dbrow-<?= h($tName) ?>">
+          <td class="mono"><?= h($tName) ?></td>
+          <td><?= number_format((int)$t['TABLE_ROWS']) ?></td>
+          <td><?= h($kb) ?> KB</td>
+          <td><?php
+            if ($isLegacy)     echo '<span class="status-legacy">'  . he('admin.db_status_legacy') . '</span>';
+            elseif ($isActive) echo '<span class="status-active">'  . he('admin.db_status_active') . '</span>';
+            else               echo '<span class="status-pending">' . he('admin.db_status_unknown') . '</span>';
+          ?></td>
+          <td>
+            <?php if ($isLegacy): ?>
+              <button class="btn-del btn-drop"
+                      data-table="<?= h($tName) ?>"
+                      data-csrf="<?= h($csrf) ?>"
+                      title="<?= he('admin.db_drop_title') ?>">
+                <?= he('admin.db_drop_btn') ?>
+              </button>
+            <?php endif; ?>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <?php endif; ?>
+  <div class="inline-actions" style="margin-top:14px">
+    <button id="btn-optimize" data-csrf="<?= h($csrf) ?>"><?= he('admin.db_optimize') ?></button>
+  </div>
+  <div id="db-result" class="result" hidden></div>
+</section>
 
-      <fieldset><legend><?= he('sec.faucet') ?></legend>
-        <label><?= he('set.title') ?><input type="text" name="faucet_title" value="<?= h($s['faucet_title'] ?? 'Elektron Net Faucet') ?>"></label>
-        <label><?= he('set.welcome_text') ?><textarea name="faucet_message" rows="2"><?= h($s['faucet_message'] ?? '') ?></textarea></label>
-        <label><?= he('set.amount_per_claim') ?><input type="text" name="amount_elek" value="<?= h($s['amount_elek'] ?? '0.001') ?>" required></label>
-        <label><?= he('set.daily_budget') ?><input type="text" name="daily_budget" value="<?= h($s['daily_budget'] ?? '0') ?>"></label>
-        <label><?= he('set.hourly_budget') ?><input type="text" name="hourly_budget" value="<?= h($s['hourly_budget'] ?? '0') ?>"></label>
-        <label><?= he('set.addr_cooldown') ?><input type="number" name="per_addr_cooldown_h" min="0" value="<?= h($s['per_addr_cooldown_h'] ?? '24') ?>"></label>
-        <label><?= he('set.ip_cooldown') ?><input type="number" name="per_ip_cooldown_h" min="0" value="<?= h($s['per_ip_cooldown_h'] ?? '1') ?>"></label>
-        <label><?= he('set.explorer_url') ?><input type="text" name="explorer_url" value="<?= h($s['explorer_url'] ?? '') ?>"></label>
-        <label><?= he('set.default_lang') ?>
-          <select name="default_lang">
-            <?php foreach (I18n::LOCALES as $code => $name): ?>
-              <option value="<?= h($code) ?>" <?= ($s['default_lang'] ?? 'en') === $code ? 'selected' : '' ?>><?= h($name) ?> (<?= h($code) ?>)</option>
-            <?php endforeach; ?>
-          </select>
-        </label>
-      </fieldset>
-
-      <fieldset><legend><?= he('sec.rpc') ?></legend>
-        <label><?= he('set.rpc_host') ?><input type="text" name="rpc_host" value="<?= h($s['rpc_host'] ?? '127.0.0.1') ?>" required></label>
-        <label><?= he('set.rpc_port') ?><input type="number" name="rpc_port" value="<?= h($s['rpc_port'] ?? '8332') ?>"></label>
-        <label><?= he('set.rpc_user') ?><input type="text" name="rpc_user" value="<?= h($s['rpc_user'] ?? '') ?>"></label>
-        <label><?= he('set.rpc_pass') ?><input type="password" name="rpc_pass" autocomplete="new-password"></label>
-        <label><?= he('set.wallet_name') ?><input type="text" name="wallet_name" value="<?= h($s['wallet_name'] ?? '') ?>"></label>
-        <label><?= he('set.wallet_pass') ?><input type="password" name="wallet_pass" autocomplete="new-password"></label>
-        <label><?= he('set.sender_addr') ?><input type="text" name="sender_addr" value="<?= h($s['sender_addr'] ?? '') ?>" placeholder="be1q&hellip;"></label>
-        <label class="checkbox-label">
-          <input type="checkbox" name="rpc_tls_verify" value="1" <?= ($s['rpc_tls_verify'] ?? '1') !== '0' ? 'checked' : '' ?>>
-          <?= he('set.tls_verify') ?>
-        </label>
-        <p class="hint warn"><?= he('set.tls_verify_warn') ?></p>
-      </fieldset>
-
-      <fieldset><legend><?= he('sec.captcha') ?></legend>
-        <label><?= he('set.captcha_site') ?><input type="text" name="hcaptcha_site" value="<?= h($s['hcaptcha_site'] ?? '') ?>"></label>
-        <label><?= he('set.captcha_secret') ?><input type="password" name="hcaptcha_secret" autocomplete="new-password"></label>
-      </fieldset>
-
-      <button type="submit" id="save-btn"><?= he('set.save') ?></button>
-    </form>
-
-    <div class="inline-actions">
-      <button id="btn-test-rpc"><?= he('set.test_rpc') ?></button>
-      <button id="btn-test-unlock"><?= he('set.test_unlock') ?></button>
-    </div>
-    <div id="rpc-result" class="result" hidden></div>
-
-    <div class="pw-section">
-      <label><?= he('set.new_admin_pass') ?></label>
-      <div class="pw-row">
-        <input id="new-pw" type="password" autocomplete="new-password" minlength="10">
-        <button id="btn-change-pw"><?= he('set.change_pw') ?></button>
-      </div>
-      <div id="pw-result" class="result" hidden></div>
-    </div>
-  </section>
-
-  <!-- DB Maintenance -->
-  <section id="sec-db-maint">
-    <h2><?= he('admin.db_maint') ?></h2>
-    <?php if (!empty($dbTableInfo)): ?>
-    <div class="table-scroll">
-      <table>
-        <thead><tr>
-          <th><?= he('admin.db_col_table') ?></th>
-          <th><?= he('admin.db_col_rows') ?></th>
-          <th><?= he('admin.db_col_size') ?></th>
-          <th><?= he('admin.db_col_status') ?></th>
-          <th></th>
-        </tr></thead>
-        <tbody>
-        <?php foreach ($dbTableInfo as $t): ?>
-          <?php
-            $tName   = (string)$t['TABLE_NAME'];
-            $isLegacy = in_array($tName, $legacyTables, true);
-            $isActive = in_array($tName, $activeTables, true);
-            $kb       = round((int)$t['total_bytes'] / 1024, 1);
-          ?>
-          <tr id="dbrow-<?= h($tName) ?>">
-            <td class="mono"><?= h($tName) ?></td>
-            <td><?= number_format((int)$t['TABLE_ROWS']) ?></td>
-            <td><?= h($kb) ?> KB</td>
-            <td><?php
-              if ($isLegacy)     echo '<span class="status-legacy">'  . he('admin.db_status_legacy') . '</span>';
-              elseif ($isActive) echo '<span class="status-active">'  . he('admin.db_status_active') . '</span>';
-              else               echo '<span class="status-pending">' . he('admin.db_status_unknown') . '</span>';
-            ?></td>
-            <td>
-              <?php if ($isLegacy): ?>
-                <button class="btn-del btn-drop"
-                        data-table="<?= h($tName) ?>"
-                        data-csrf="<?= h($csrf) ?>"
-                        title="<?= he('admin.db_drop_title') ?>">
-                  <?= he('admin.db_drop_btn') ?>
-                </button>
-              <?php endif; ?>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-    <?php endif; ?>
-    <div class="inline-actions" style="margin-top:14px">
-      <button id="btn-optimize" data-csrf="<?= h($csrf) ?>"><?= he('admin.db_optimize') ?></button>
-    </div>
-    <div id="db-result" class="result" hidden></div>
-  </section>
-
-</div><!-- .admin-main -->
 </div><!-- .page.admin -->
 
 <script>
@@ -472,7 +459,6 @@ async function ajaxPost(data, btn) {
   } finally { if (btn) setLoading(btn, false); }
 }
 
-// Settings
 document.getElementById('settings-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('save-btn');
@@ -480,7 +466,6 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
   showToast(d.msg || (d.ok ? 'Saved' : 'Error'), d.ok);
 });
 
-// RPC tests
 document.getElementById('btn-test-rpc').addEventListener('click', async function() {
   const d = await ajaxPost({ action:'test_rpc', csrf:CSRF }, this);
   showInline(document.getElementById('rpc-result'), d.ok, d.msg || (d.ok?'OK':'Error'));
@@ -490,7 +475,6 @@ document.getElementById('btn-test-unlock').addEventListener('click', async funct
   showInline(document.getElementById('rpc-result'), d.ok, d.msg || (d.ok?'OK':'Error'));
 });
 
-// Password
 document.getElementById('btn-change-pw').addEventListener('click', async function() {
   const pw = document.getElementById('new-pw').value;
   const d  = await ajaxPost({ action:'change_password', new_password:pw, csrf:CSRF }, this);
@@ -498,7 +482,6 @@ document.getElementById('btn-change-pw').addEventListener('click', async functio
   if (d.ok) document.getElementById('new-pw').value = '';
 });
 
-// Live stats (60s)
 function satToElek(s) { return (s/1e8).toFixed(8).replace(/\.?0+$/,'') || '0'; }
 function refreshStats() {
   fetch('admin.php?ajax=stats', {headers:{'X-Requested-With':'XMLHttpRequest'}})
@@ -512,7 +495,6 @@ function refreshStats() {
 }
 setInterval(refreshStats, 60000);
 
-// DB maintenance ─ drop table
 document.querySelectorAll('.btn-drop').forEach(btn => {
   btn.addEventListener('click', async function() {
     const table = this.dataset.table;
@@ -523,7 +505,6 @@ document.querySelectorAll('.btn-drop').forEach(btn => {
   });
 });
 
-// DB maintenance ─ optimize
 document.getElementById('btn-optimize').addEventListener('click', async function() {
   const d = await ajaxPost({ action:'optimize_tables', csrf:this.dataset.csrf }, this);
   showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok?'Done':'Error'));
