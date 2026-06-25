@@ -106,12 +106,11 @@ return [
     'donate.amount_label'       => 'Amount (ELEK)',
     'donate.name_label'         => 'Your name (optional)',
     'donate.name_ph'            => 'Anonymous',
-    'donate.instruction_title'  => 'Payment Instruction',
+    'donate.uri_hint'           => 'Copy the payment URI below and paste it into your Elektron Net wallet — it pre-fills the address, amount and label automatically.',
+    'donate.copy_uri'           => 'Copy URI',
     'donate.pi_address'         => 'Address',
     'donate.pi_amount'          => 'Amount',
-    'donate.pi_memo'            => 'Memo / Label',
-    'donate.copy'               => 'Copy',
-    'donate.hint'               => 'Open your ELEK wallet and enter the address, amount, and memo above to complete the donation.',
+    'donate.pi_memo'            => 'Label',
     'donate.donors_link'        => 'View incoming donations →',
 
     // Donors page
