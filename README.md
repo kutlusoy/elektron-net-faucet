@@ -18,6 +18,13 @@ browser-based setup wizard, configure everything from the admin panel.
   User-switchable, with `Accept-Language` auto-detection.
 - Setup-wizard at `install.php` — writes `config.php`, imports the schema,
   creates the admin user, then self-locks.
+- **Donation QR code** — visitors can donate ELEK directly to the faucet
+  wallet by scanning a live QR code that encodes a `elektron:ADDRESS?amount=X`
+  payment URI. They can optionally leave a name and message.
+- **Donors page** (`donors.php`) — public leaderboard listing all donors with
+  date, name, message, and amount, newest first.
+- **AJAX-driven admin panel** — all settings, RPC tests, password changes, and
+  donation management update without page reloads.
 
 ---
 
@@ -132,7 +139,8 @@ $ elektron-cli -rpcwallet=faucet getnewaddress "" bech32
 ```
 
 Copy that `be1q…` address. You will fund it from your prepaid stash in
-Part 3.
+Part 3. This address is also shown as the donation QR target on the public
+home page — paste it into **Settings → Sender address** in the admin panel.
 
 #### 1.6  Wait for sync
 
@@ -186,9 +194,12 @@ Or download the ZIP from GitHub and upload via FTP/SFTP. Final layout:
     ├── index.php
     ├── admin.php
     ├── api.php
+    ├── donors.php
     ├── install.php
     ├── .htaccess
     └── assets/
+        ├── style.css
+        └── logo.svg
 ```
 
 Point the web-server's DocumentRoot at `public/`. On shared hosting that
@@ -236,7 +247,20 @@ server {
 **Always serve via HTTPS.** The faucet sets an HSTS header automatically
 when it detects HTTPS, and admin session cookies are flagged `Secure`.
 
-#### 2.4  Run the browser installer
+#### 2.4  Existing installations — run the migration
+
+If you are **upgrading** an existing installation rather than doing a fresh
+install, run the donations migration to add the new table:
+
+```bash
+$ mysql -u elek_faucet -p elek_faucet < sql/donations_migration.sql
+```
+
+The file uses `CREATE TABLE IF NOT EXISTS`, so it is safe to run multiple
+times without side effects. Fresh installs do not need this step — the full
+`sql/schema.sql` already includes the `donations` table.
+
+#### 2.5  Run the browser installer
 
 Open: `https://faucet.example.com/install.php`
 
@@ -260,11 +284,11 @@ When you see "Installation successful":
 lock file blocks re-runs, but removing the script entirely is best
 practice.
 
-#### 2.5  Log in and configure
+#### 2.6  Log in and configure
 
 Go to `https://faucet.example.com/admin.php` and log in with the admin
 account you just created. In **Settings**, fill in three blocks and click
-**Save**:
+**Save** (all changes are saved via AJAX — no page reload):
 
 **Faucet**
 - *Title* — shown at the top of the public page.
@@ -279,6 +303,8 @@ account you just created. In **Settings**, fill in three blocks and click
   appended so successful claims show a clickable link.
 - *Default language* — fallback when the visitor's browser doesn't request
   a language we ship.
+- *Sender address* — the `be1q…` deposit address from step 1.5. When set,
+  a donation QR code appears on the public home page.
 
 **Wallet RPC** (these are the values from Part 1)
 - *RPC host* — `127.0.0.1` if node and website share a machine; for a
@@ -289,8 +315,6 @@ account you just created. In **Settings**, fill in three blocks and click
   field blank during a later save keeps the existing value.**
 - *Wallet name* — `faucet` (the name you used in step 1.4).
 - *Wallet passphrase* — the passphrase from `encryptwallet` in step 1.4.
-- *Sender address* — purely informational, shown in the admin UI.
-  `sendtoaddress` picks UTXOs automatically.
 
 **hCaptcha** (strongly recommended — bots will find you)
 1. Sign up at <https://www.hcaptcha.com/> (free tier is fine).
@@ -331,6 +355,7 @@ budget is being enforced as you expect, then share the URL.
 | Claim returns "Payout failed"                 | Insufficient wallet balance, or fee estimation failed (node not fully synced).            |
 | Public page shows "Faucet is disabled"        | `amount_per_claim` is `0`. Set it in the admin panel.                                     |
 | Installer says "Already installed"            | Delete `.installed` in the project root to re-run.                                        |
+| QR code doesn't appear on the home page       | `Sender address` is empty in Settings — fill it in with the `be1q…` address from step 1.5. |
 | `Test RPC` → "SSL: no alternative certificate subject name matches…" | The cert served on 443 isn't yours — a router, hoster gateway, or AV intercepts the port. See [Troubleshooting Pattern C](#troubleshooting-pattern-c-when-port-443-is-already-taken). |
 | `Test RPC` → "Connection closed abruptly"     | Same root cause: something terminates TLS before the request reaches your node. Switch to a non-standard port or a Cloudflare Tunnel. |
 
@@ -645,7 +670,7 @@ matches your CA — **not** the router's `CN=<public-ip>`.
 In the faucet admin set:
 
 | Field    | Value                                              |
-|----------|----------------------------------------------------|
+|----------|-------------------------------------------------|
 | RPC host | `https://faucet-node.example.com:8443/`            |
 | RPC port | ignored (the scheme + explicit port win)           |
 
@@ -849,6 +874,36 @@ way?"* Yes — the faucet uses **wallet-level encryption on the node**:
 
 ---
 
+## Donations
+
+The faucet doubles as a community donation point:
+
+- When **Sender address** is configured in Settings, a **Donate** section
+  appears below the claim form on the home page.
+- A live QR code encodes the `elektron:ADDRESS?amount=X` payment URI so
+  visitors can scan it directly from any compatible ELEK wallet.
+- The amount field on the QR form updates the URI in real time.
+- After sending, donors can submit their name and a short message via the
+  "Report my donation" form — this records the donation in the database
+  (honour system, no on-chain verification).
+- The public **Donors** page (`donors.php`) lists all reported donations
+  newest-first with date, name, message, and amount.
+- Admins can review and delete individual donation records from the admin
+  panel without a page reload.
+
+### Upgrading an existing installation
+
+Run the idempotent migration once:
+
+```bash
+mysql -u elek_faucet -p elek_faucet < sql/donations_migration.sql
+```
+
+The script uses `CREATE TABLE IF NOT EXISTS` and is safe to run multiple
+times.
+
+---
+
 ## Configuration reference
 
 All settings (except DB credentials and `app_key`) live in the `settings`
@@ -865,6 +920,7 @@ table and are edited through the admin panel. Sensitive ones
 | `per_ip_cooldown_h`    | An IP can only claim once every N hours.                                |
 | `default_lang`         | Fallback locale when the user hasn't picked one and no `Accept-Language` match. |
 | `explorer_url`         | URL prefix; the txid is appended for the success link in the frontend.  |
+| `sender_addr`          | The `be1q…` address shown as the donation target (also used by the QR). |
 | `rpc_host`/`rpc_port`  | Where to reach the elektron-net JSON-RPC.                               |
 | `rpc_user`/`rpc_pass`  | RPC credentials (must match the node's `bitcoin.conf`).                 |
 | `wallet_name`          | Sent as `/wallet/<name>` segment for multi-wallet nodes; blank = default wallet. |
@@ -910,9 +966,10 @@ the `Accept-Language` header is honored, then `default_lang`, then English.
 - `config.php` should be **outside the webroot**, mode `0600`, with the
   32-byte `app_key` never committed to git.
 - `public/.htaccess` denies direct PHP access to anything not in the
-  whitelist (`index.php`, `admin.php`, `api.php`, `install.php`).
+  whitelist (`index.php`, `admin.php`, `api.php`, `donors.php`, `install.php`).
 - Always serve via HTTPS. The `Strict-Transport-Security` header is sent
   automatically when HTTPS is detected.
+- Donation reports are rate-limited to 10 per IP per hour.
 
 ---
 
@@ -932,7 +989,8 @@ elektron-net-faucet/
 │   ├── fr.php
 │   └── pt.php
 ├── sql/
-│   └── schema.sql
+│   ├── schema.sql              full schema (fresh installs)
+│   └── donations_migration.sql add donations table to existing installs
 ├── src/                        PSR-4-like core (manual autoload in Bootstrap.php)
 │   ├── Bootstrap.php
 │   ├── Config.php
@@ -949,12 +1007,15 @@ elektron-net-faucet/
 │   ├── Logger.php              audit log
 │   └── I18n.php                locale detection + translation helper
 └── public/                     web-server DocumentRoot
-    ├── index.php
-    ├── admin.php
-    ├── api.php
+    ├── index.php               claim form + donation QR section
+    ├── admin.php               AJAX admin panel
+    ├── api.php                 claim + donation report endpoint
+    ├── donors.php              public donors leaderboard
     ├── install.php             delete after install
     ├── .htaccess
-    └── assets/style.css
+    └── assets/
+        ├── style.css
+        └── logo.svg            Elektron Net coin logo (used as favicon + site header)
 ```
 
 ---
