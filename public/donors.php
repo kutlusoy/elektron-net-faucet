@@ -6,6 +6,8 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 
 use ElektronFaucet\Db;
 use ElektronFaucet\I18n;
+use ElektronFaucet\Wallet;
+use ElektronFaucet\RateLimiter;
 
 if (isset($_GET['lang']) && is_string($_GET['lang'])) {
     I18n::setLocale($_GET['lang']);
@@ -13,16 +15,39 @@ if (isset($_GET['lang']) && is_string($_GET['lang'])) {
 
 function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
-$locale    = I18n::locale();
-$s         = Db::getAllSettings();
-$title     = $s['faucet_title'] ?? __('faucet.title');
+$locale     = I18n::locale();
+$s          = Db::getAllSettings();
+$title      = $s['faucet_title'] ?? __('faucet.title');
+$faucetAddr = trim((string)($s['sender_addr'] ?? ''));
+$explorer   = $s['explorer_url'] ?? '';
 
-$donations = Db::fetchAll(
-    'SELECT id, amount_elek, donor_name, message, created_at FROM donations ORDER BY created_at DESC LIMIT 500'
-);
-$agg = Db::fetchOne('SELECT COUNT(*) AS cnt, COALESCE(SUM(amount_elek),0) AS total FROM donations');
-$totalAmount = number_format((float)($agg['total'] ?? 0), 4);
-$totalCount  = (int)($agg['cnt'] ?? 0);
+// ── Fetch incoming transactions from RPC ──
+$txList        = [];
+$rpcErr        = null;
+$totalReceived = 0.0;
+
+if ($faucetAddr !== '') {
+    try {
+        $rpc = Wallet::fromSettings()->rpc();
+        $all = $rpc->call('listtransactions', ['*', 500, 0, true]);
+        if (is_array($all)) {
+            foreach ($all as $tx) {
+                if (($tx['category'] ?? '') === 'receive'
+                    && ($tx['address']  ?? '') === $faucetAddr) {
+                    $txList[]       = $tx;
+                    $totalReceived += (float)($tx['amount'] ?? 0);
+                }
+            }
+            usort($txList, fn($a, $b) => ($b['time'] ?? 0) <=> ($a['time'] ?? 0));
+        }
+    } catch (\Throwable $e) {
+        $rpcErr = $e->getMessage();
+    }
+}
+
+function fmtDate(int $ts): string {
+    return date('Y-m-d H:i', $ts);
+}
 ?>
 <!doctype html>
 <html lang="<?= h($locale) ?>">
@@ -34,10 +59,12 @@ $totalCount  = (int)($agg['cnt'] ?? 0);
 <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
 </head>
 <body>
-<header class="site-header">
+<div class="page wide">
+
+<header class="page-header">
   <a href="index.php" class="site-logo" aria-label="<?= h($title) ?>">
-    <img src="assets/logo.svg" alt="Elektron Net" width="36" height="36">
-    <span><?= h($title) ?></span>
+    <img src="assets/logo.svg" alt="" width="64" height="64">
+    <span class="site-name"><?= h($title) ?></span>
   </a>
   <div class="lang-switch">
     <?php foreach (I18n::LOCALES as $code => $name): ?>
@@ -46,44 +73,70 @@ $totalCount  = (int)($agg['cnt'] ?? 0);
   </div>
 </header>
 
-<main class="card donors-card">
+<main class="card">
   <h1><?= he('donors.title') ?></h1>
   <p class="lead"><?= he('donors.lead') ?></p>
 
-  <?php if ($totalCount > 0): ?>
-  <p class="donors-total"><?= he('donors.total', ['amount' => h($totalAmount), 'count' => $totalCount]) ?></p>
-  <?php endif; ?>
+  <?php if ($faucetAddr === ''): ?>
+    <p class="muted"><?= he('donors.no_addr') ?></p>
 
-  <?php if (empty($donations)): ?>
+  <?php elseif ($rpcErr !== null): ?>
+    <div class="result err"><?= h(__('donors.rpc_error') . ' ' . $rpcErr) ?></div>
+
+  <?php elseif (empty($txList)): ?>
     <p class="muted"><?= he('donors.none') ?></p>
+
   <?php else: ?>
-  <div class="donors-table-wrap">
-    <table class="donors-table">
-      <thead>
-        <tr>
+    <p class="donors-total">
+      <?= he('donors.total_received', [
+          'amount' => number_format($totalReceived, 4),
+          'count'  => count($txList),
+      ]) ?>
+    </p>
+    <div class="donors-table-wrap">
+      <table class="donors-table">
+        <thead><tr>
           <th><?= he('donors.col.date') ?></th>
-          <th><?= he('donors.col.name') ?></th>
-          <th><?= he('donors.col.message') ?></th>
+          <th><?= he('donors.col.confirmations') ?></th>
+          <th><?= he('donors.col.txid') ?></th>
           <th><?= he('donors.col.amount') ?></th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($donations as $d): ?>
-        <tr>
-          <td class="donors-date"><?= h(substr((string)$d['created_at'], 0, 10)) ?></td>
-          <td class="donors-name"><?= h((string)($d['donor_name'] ?: he('donors.anonymous'))) ?></td>
-          <td class="donors-msg"><?= h((string)($d['message'] ?? '')) ?></td>
-          <td class="donors-amount"><?= h(rtrim(rtrim(number_format((float)$d['amount_elek'], 8), '0'), '.')) ?> ELEK</td>
-        </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($txList as $tx): ?>
+            <?php
+              $confs  = (int)($tx['confirmations'] ?? 0);
+              $txid   = (string)($tx['txid'] ?? '');
+              $amt    = (float)($tx['amount'] ?? 0);
+              $time   = (int)($tx['time'] ?? $tx['timereceived'] ?? 0);
+            ?>
+            <tr>
+              <td class="donors-date"><?= h($time ? fmtDate($time) : '—') ?></td>
+              <td class="donors-conf">
+                <span class="<?= $confs >= 6 ? 'conf-ok' : 'conf-pending' ?>">
+                  <?= $confs >= 6 ? '✓' : ($confs . ' conf') ?>
+                </span>
+              </td>
+              <td class="donors-tx mono">
+                <?php if ($txid !== '' && $explorer !== ''): ?>
+                  <a href="<?= h($explorer . $txid) ?>" target="_blank" rel="noopener"
+                     title="<?= h($txid) ?>"><?= h(substr($txid, 0, 16)) ?>&hellip;</a>
+                <?php elseif ($txid !== ''): ?>
+                  <span title="<?= h($txid) ?>"><?= h(substr($txid, 0, 16)) ?>&hellip;</span>
+                <?php endif; ?>
+              </td>
+              <td class="donors-amount"><?= h(rtrim(rtrim(number_format($amt, 8), '0'), '.')) ?> ELEK</td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
   <?php endif; ?>
 
   <footer>
     <a href="index.php"><?= he('donors.back') ?></a>
   </footer>
 </main>
+
+</div>
 </body>
 </html>

@@ -24,7 +24,10 @@ final class Bootstrap
         Config::load($configPath);
 
         $defaultLang = null;
-        try { $defaultLang = Db::getSetting('default_lang', 'en'); } catch (\Throwable) {}
+        try {
+            Db::migrate();                          // idempotent — safe on every request
+            $defaultLang = Db::getSetting('default_lang', 'en');
+        } catch (\Throwable) {}
         I18n::boot($defaultLang ?? 'en');
 
         if (!headers_sent()) {
