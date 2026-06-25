@@ -96,8 +96,11 @@ input, textarea, select {
     border: 1px solid var(--border); background: #0b0f17;
     color: var(--fg); font: inherit;
 }
+
+/* All buttons — normal size everywhere */
 button {
-    padding: 10px 18px;
+    width: auto;
+    padding: 9px 18px;
     border-radius: 8px;
     border: 0;
     background: var(--accent);
@@ -111,13 +114,6 @@ button {
 button:hover    { background: #7ac6f8; }
 button:active   { transform: translateY(1px); }
 button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-
-/* Public-facing primary forms keep the full-width submit (claim, login, install) */
-#claim-form button[type="submit"],
-form [name="action"][value="login"] ~ button,
-body:not(.admin) main.card > form button[type="submit"] {
-    width: 100%;
-}
 
 .h-captcha { margin: 12px 0; }
 .result { margin: 14px 0; padding: 10px 12px; border-radius: 8px; word-break: break-all; }
@@ -205,10 +201,6 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 
 /* ── Admin layout ── */
 body.admin { background: var(--bg); }
-
-/* Admin buttons: normal size, never full width */
-body.admin button { width: auto; }
-
 .stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -259,7 +251,7 @@ fieldset legend { color: var(--muted); padding: 0 6px; font-size: .85rem; }
 .hint { color: var(--muted); font-size: .82rem; margin: 4px 0 0; }
 .hint.warn { color: var(--warn); }
 
-/* ── Test buttons (per-row state + inline message) ── */
+/* ── Test buttons ── */
 .test-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 .test-row  { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .btn-test  {
