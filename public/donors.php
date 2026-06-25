@@ -7,7 +7,6 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 use ElektronFaucet\Db;
 use ElektronFaucet\I18n;
 use ElektronFaucet\Wallet;
-use ElektronFaucet\RateLimiter;
 
 if (isset($_GET['lang']) && is_string($_GET['lang'])) {
     I18n::setLocale($_GET['lang']);
@@ -21,7 +20,6 @@ $title      = $s['faucet_title'] ?? __('faucet.title');
 $faucetAddr = trim((string)($s['sender_addr'] ?? ''));
 $explorer   = $s['explorer_url'] ?? '';
 
-// ── Fetch incoming transactions from RPC ──
 $txList        = [];
 $rpcErr        = null;
 $totalReceived = 0.0;
@@ -45,9 +43,7 @@ if ($faucetAddr !== '') {
     }
 }
 
-function fmtDate(int $ts): string {
-    return date('Y-m-d H:i', $ts);
-}
+function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
 ?>
 <!doctype html>
 <html lang="<?= h($locale) ?>">
@@ -64,17 +60,19 @@ function fmtDate(int $ts): string {
 <header class="page-header">
   <a href="index.php" class="site-logo" aria-label="<?= h($title) ?>">
     <img src="assets/logo.svg" alt="" width="64" height="64">
-    <span class="site-name"><?= h($title) ?></span>
   </a>
-  <div class="lang-switch">
-    <?php foreach (I18n::LOCALES as $code => $name): ?>
-      <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
-    <?php endforeach; ?>
+  <h1 class="site-name"><?= h($title) ?></h1>
+  <div class="header-nav">
+    <div class="lang-switch">
+      <?php foreach (I18n::LOCALES as $code => $name): ?>
+        <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
+      <?php endforeach; ?>
+    </div>
   </div>
 </header>
 
 <main class="card">
-  <h1><?= he('donors.title') ?></h1>
+  <h2><?= he('donors.title') ?></h2>
   <p class="lead"><?= he('donors.lead') ?></p>
 
   <?php if ($faucetAddr === ''): ?>
@@ -104,10 +102,10 @@ function fmtDate(int $ts): string {
         <tbody>
           <?php foreach ($txList as $tx): ?>
             <?php
-              $confs  = (int)($tx['confirmations'] ?? 0);
-              $txid   = (string)($tx['txid'] ?? '');
-              $amt    = (float)($tx['amount'] ?? 0);
-              $time   = (int)($tx['time'] ?? $tx['timereceived'] ?? 0);
+              $confs = (int)($tx['confirmations'] ?? 0);
+              $txid  = (string)($tx['txid'] ?? '');
+              $amt   = (float)($tx['amount'] ?? 0);
+              $time  = (int)($tx['time'] ?? $tx['timereceived'] ?? 0);
             ?>
             <tr>
               <td class="donors-date"><?= h($time ? fmtDate($time) : '—') ?></td>

@@ -1,11 +1,6 @@
 <?php
 declare(strict_types=1);
 
-/**
- * One-shot installer. Self-locks after success (writes /config.php and .installed).
- * Delete this file after successful install for maximum safety.
- */
-
 require_once __DIR__ . '/../src/I18n.php';
 \ElektronFaucet\I18n::boot('en');
 if (isset($_GET['lang']) && is_string($_GET['lang'])) {
@@ -31,11 +26,11 @@ $errors = [];
 $done = false;
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['step'] ?? '') === 'install') {
-    $dbHost   = trim((string)($_POST['db_host'] ?? '127.0.0.1'));
-    $dbPort   = (int)($_POST['db_port'] ?? 3306);
-    $dbName   = trim((string)($_POST['db_name'] ?? ''));
-    $dbUser   = trim((string)($_POST['db_user'] ?? ''));
-    $dbPass   = (string)($_POST['db_pass'] ?? '');
+    $dbHost    = trim((string)($_POST['db_host'] ?? '127.0.0.1'));
+    $dbPort    = (int)($_POST['db_port'] ?? 3306);
+    $dbName    = trim((string)($_POST['db_name'] ?? ''));
+    $dbUser    = trim((string)($_POST['db_user'] ?? ''));
+    $dbPass    = (string)($_POST['db_pass'] ?? '');
     $adminUser = trim((string)($_POST['admin_user'] ?? ''));
     $adminPass = (string)($_POST['admin_pass'] ?? '');
 
@@ -107,18 +102,20 @@ $siteTitle = 'Elektron Net Faucet';
 <div class="page">
 
 <header class="page-header">
-  <a href="index.php" class="site-logo">
+  <a href="index.php" class="site-logo" aria-label="<?= h($siteTitle) ?>">
     <img src="assets/logo.svg" alt="" width="64" height="64">
-    <span class="site-name"><?= h($siteTitle) ?></span>
   </a>
-  <div class="lang-switch">
-    <?php foreach (\ElektronFaucet\I18n::LOCALES as $code => $name): ?>
-      <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
-    <?php endforeach; ?>
+  <h1 class="site-name"><?= h($siteTitle) ?></h1>
+  <div class="header-nav">
+    <div class="lang-switch">
+      <?php foreach (\ElektronFaucet\I18n::LOCALES as $code => $name): ?>
+        <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
+      <?php endforeach; ?>
+    </div>
   </div>
 </header>
 
-<div class="card">
+<main class="card">
   <h2><?= he('inst.title') ?></h2>
 
   <?php if ($done): ?>
@@ -145,7 +142,7 @@ $siteTitle = 'Elektron Net Faucet';
       <button type="submit"><?= he('inst.install') ?></button>
     </form>
   <?php endif; ?>
-</div>
+</main>
 
 </div>
 </body></html>

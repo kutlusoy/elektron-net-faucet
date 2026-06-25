@@ -19,79 +19,78 @@ html, body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* ── Page container ── */
+/* ── Page container (max-width applies to header AND content) ── */
 .page {
     max-width: 560px;
     margin: 0 auto;
     padding: 28px 16px 60px;
 }
-.page.wide   { max-width: 840px; }
-.page.admin  { max-width: 1140px; padding: 0 16px 60px; }
+.page.wide  { max-width: 840px; }
+.page.admin { max-width: 960px; }
 
-/* ── Page header card (public pages) ── */
+/* ── Page header card ── */
 .page-header {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 28px 24px 18px;
+    padding: 26px 24px 18px;
     margin-bottom: 16px;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
 }
 
-/* ── Site logo (stacked on public, row on admin) ── */
+/* Logo: link wraps the image only — site name is a separate <h1> below */
 .site-logo {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
+    display: inline-block;
+    line-height: 0;
     text-decoration: none;
-    color: var(--fg);
 }
 .site-logo:hover { text-decoration: none; }
-.site-logo img  { width: 64px; height: 64px; display: block; }
-.site-logo .site-name {
-    font-size: 1.25rem;
+.site-logo img {
+    width: 64px; height: 64px; display: block;
+    transition: transform .15s ease;
+}
+.site-logo:hover img { transform: scale(1.04); }
+
+/* Site name as semantic h1, not linked */
+.site-name {
+    margin: 0;
+    font-size: 1.35rem;
     font-weight: 700;
     letter-spacing: .01em;
     color: var(--fg);
+    line-height: 1.2;
 }
 @media (max-width: 480px) {
-    .site-logo img      { width: 48px; height: 48px; }
-    .site-logo .site-name { font-size: 1.05rem; }
+    .site-logo img { width: 52px; height: 52px; }
+    .site-name     { font-size: 1.1rem; }
 }
 
-/* ── Admin header (row layout inside .page.admin) ── */
-.page-header.admin-header {
-    flex-direction: row;
-    justify-content: space-between;
-    text-align: left;
-    gap: 16px;
-    padding: 14px 20px;
-    margin-top: 20px;
-}
-.page-header.admin-header .site-logo {
-    flex-direction: row;
+/* Header nav row (lang + optional admin badge/logout) */
+.header-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
     gap: 12px;
+    margin-top: 2px;
 }
-.page-header.admin-header .site-logo img { width: 38px; height: 38px; }
-.page-header.admin-header .site-logo .site-name { font-size: 1rem; }
-.admin-nav { display: flex; align-items: center; gap: 14px; }
 .admin-badge {
-    font-size: .75rem; color: var(--muted);
+    font-size: .72rem; color: var(--muted);
     background: rgba(255,255,255,.06);
     padding: 3px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: .04em;
 }
-.logout-link { color: var(--err); font-size: .85rem; }
+.logout-link { color: var(--err); font-size: .82rem; }
 .logout-link:hover { text-decoration: underline; }
 
 /* ── Lang switch ── */
-.lang-switch { display: flex; gap: 5px; justify-content: center; }
+.lang-switch { display: inline-flex; gap: 5px; }
 .lang-switch a {
-    color: var(--muted); font-size: .75rem;
+    color: var(--muted); font-size: .72rem;
     padding: 2px 7px; border-radius: 4px;
     text-transform: uppercase; text-decoration: none;
 }
@@ -105,8 +104,9 @@ a:hover { text-decoration: underline; }
     padding: 28px;
     margin-bottom: 16px;
 }
-.card h1 { margin: 0 0 8px; font-size: 1.5rem; }
-.card .lead  { color: var(--muted); margin: 0 0 10px; }
+.card h1 { margin: 0 0 8px; font-size: 1.35rem; }
+.card h2 { margin: 0 0 10px; font-size: 1.1rem; }
+.card .lead   { color: var(--muted); margin: 0 0 10px; }
 .card .amount { font-weight: 600; color: var(--accent); margin: 0 0 20px; }
 
 /* ── Forms ── */
@@ -129,8 +129,8 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .muted { color: var(--muted); }
 .mono  { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .82rem; }
 
-/* ── Donate / payment instruction ── */
-.donate-section h2    { margin: 0 0 6px; font-size: 1.1rem; }
+/* ── Donate section ── */
+.donate-section h2    { margin: 0 0 6px; font-size: 1.15rem; }
 .donate-section .lead { color: var(--muted); margin: 0 0 18px; font-size: .9rem; }
 .donate-inputs {
     display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
@@ -138,37 +138,53 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .donate-inputs > div { flex: 1; min-width: 140px; }
 .donate-inputs label { margin-top: 0; }
 
-.pay-box {
+/* The URI box — the primary copy target */
+.uri-box {
+    background: #0d1218;
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 12px;
+}
+.uri-box-content {
+    flex: 1; min-width: 0;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .82rem;
+    color: var(--fg);
+    word-break: break-all;
+    line-height: 1.5;
+}
+.btn-copy {
+    width: auto; padding: 8px 14px; margin: 0;
+    font-size: .82rem; font-weight: 600;
+    background: var(--accent); color: #05111c;
+    border: 0; border-radius: 6px;
+    cursor: pointer; flex-shrink: 0;
+    white-space: nowrap;
+}
+.btn-copy:hover { opacity: .9; }
+.btn-copy.copied { background: var(--ok); }
+
+/* Info breakdown below URI */
+.pay-info {
     background: #0d1218;
     border: 1px solid var(--border);
     border-radius: 10px;
     overflow: hidden;
     margin-bottom: 14px;
 }
-.pay-box-title {
-    font-size: .72rem; text-transform: uppercase;
-    letter-spacing: .07em; color: var(--muted);
-    padding: 10px 14px 8px;
-    border-bottom: 1px solid var(--border);
-}
 .pi-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px;
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 14px;
     border-bottom: 1px solid var(--border);
+    font-size: .82rem;
 }
 .pi-row:last-child { border-bottom: none; }
-.pi-label { font-size: .75rem; color: var(--muted); width: 60px; flex-shrink: 0; }
-.pi-value { flex: 1; font-size: .88rem; word-break: break-all; }
+.pi-label { color: var(--muted); width: 70px; flex-shrink: 0; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+.pi-value { flex: 1; word-break: break-all; }
 .pi-value.mono { font-size: .78rem; }
 
-.btn-copy {
-    width: auto; padding: 3px 10px; margin: 0; font-size: .72rem; font-weight: 600;
-    background: transparent; color: var(--accent);
-    border: 1px solid var(--accent); border-radius: 4px;
-    cursor: pointer; flex-shrink: 0;
-}
-.btn-copy:hover { background: rgba(91,184,245,.1); }
-.btn-copy.copied { color: var(--ok); border-color: var(--ok); }
 .donate-hint { font-size: .82rem; color: var(--muted); margin: 0 0 12px; }
 .donate-donors-link { text-align: right; font-size: .85rem; }
 
@@ -177,7 +193,7 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .donors-table-wrap { overflow-x: auto; }
 .donors-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
 .donors-table th {
-    color: var(--muted); font-size: .74rem; text-transform: uppercase;
+    color: var(--muted); font-size: .72rem; text-transform: uppercase;
     padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border);
     white-space: nowrap;
 }
@@ -200,7 +216,6 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 
 /* ── Admin layout ── */
 body.admin { background: var(--bg); }
-.admin-main { padding-top: 16px; }
 .stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
