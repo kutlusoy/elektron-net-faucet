@@ -100,39 +100,52 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['step'] ?? '') === 
     }
 }
 $locale = \ElektronFaucet\I18n::locale();
+$siteTitle = 'Elektron Net Faucet';
 ?><!doctype html>
 <html lang="<?= h($locale) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= he('inst.title') ?></title><link rel="stylesheet" href="assets/style.css"></head><body>
-<main class="card">
-<div class="lang-switch">
-  <?php foreach (\ElektronFaucet\I18n::LOCALES as $code => $name): ?>
-    <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
-  <?php endforeach; ?>
-</div>
-<h1><?= he('inst.title') ?></h1>
+<div class="page">
 
-<?php if ($done): ?>
-  <div class="result ok">
-    <?= he('inst.done') ?><br>
-    <strong><?= __('inst.delete_installer') ?></strong><br>
-    <a href="admin.php"><?= he('inst.go_admin') ?></a>
+<header class="page-header">
+  <a href="index.php" class="site-logo">
+    <img src="assets/logo.svg" alt="" width="64" height="64">
+    <span class="site-name"><?= h($siteTitle) ?></span>
+  </a>
+  <div class="lang-switch">
+    <?php foreach (\ElektronFaucet\I18n::LOCALES as $code => $name): ?>
+      <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
+    <?php endforeach; ?>
   </div>
-<?php else: ?>
-  <?php foreach ($errors as $e): ?><div class="result err"><?= h($e) ?></div><?php endforeach; ?>
-  <form method="post" autocomplete="off">
-    <input type="hidden" name="step" value="install">
-    <fieldset><legend><?= he('inst.db') ?></legend>
-      <label><?= he('inst.host') ?><input name="db_host" value="<?= h($_POST['db_host'] ?? '127.0.0.1') ?>" required></label>
-      <label><?= he('inst.port') ?><input name="db_port" type="number" value="<?= h($_POST['db_port'] ?? '3306') ?>" required></label>
-      <label><?= he('inst.db_name') ?><input name="db_name" value="<?= h($_POST['db_name'] ?? '') ?>" required></label>
-      <label><?= he('inst.db_user') ?><input name="db_user" value="<?= h($_POST['db_user'] ?? '') ?>" required></label>
-      <label><?= he('inst.db_pass') ?><input name="db_pass" type="password"></label>
-    </fieldset>
-    <fieldset><legend><?= he('inst.admin') ?></legend>
-      <label><?= he('inst.user') ?><input name="admin_user" required></label>
-      <label><?= he('inst.pass_min10') ?><input name="admin_pass" type="password" minlength="10" required></label>
-    </fieldset>
-    <button type="submit"><?= he('inst.install') ?></button>
-  </form>
-<?php endif; ?>
-</main></body></html>
+</header>
+
+<div class="card">
+  <h2><?= he('inst.title') ?></h2>
+
+  <?php if ($done): ?>
+    <div class="result ok">
+      <?= he('inst.done') ?><br>
+      <strong><?= __('inst.delete_installer') ?></strong><br>
+      <a href="admin.php"><?= he('inst.go_admin') ?></a>
+    </div>
+  <?php else: ?>
+    <?php foreach ($errors as $e): ?><div class="result err"><?= h($e) ?></div><?php endforeach; ?>
+    <form method="post" autocomplete="off">
+      <input type="hidden" name="step" value="install">
+      <fieldset><legend><?= he('inst.db') ?></legend>
+        <label><?= he('inst.host') ?><input name="db_host" value="<?= h($_POST['db_host'] ?? '127.0.0.1') ?>" required></label>
+        <label><?= he('inst.port') ?><input name="db_port" type="number" value="<?= h($_POST['db_port'] ?? '3306') ?>" required></label>
+        <label><?= he('inst.db_name') ?><input name="db_name" value="<?= h($_POST['db_name'] ?? '') ?>" required></label>
+        <label><?= he('inst.db_user') ?><input name="db_user" value="<?= h($_POST['db_user'] ?? '') ?>" required></label>
+        <label><?= he('inst.db_pass') ?><input name="db_pass" type="password"></label>
+      </fieldset>
+      <fieldset><legend><?= he('inst.admin') ?></legend>
+        <label><?= he('inst.user') ?><input name="admin_user" required></label>
+        <label><?= he('inst.pass_min10') ?><input name="admin_pass" type="password" minlength="10" required></label>
+      </fieldset>
+      <button type="submit"><?= he('inst.install') ?></button>
+    </form>
+  <?php endif; ?>
+</div>
+
+</div>
+</body></html>
