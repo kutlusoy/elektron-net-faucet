@@ -21,12 +21,16 @@ final class Wallet
         $passEnc = $s['rpc_pass_enc'] ?? '';
         $pass = $passEnc !== '' ? Crypto::decrypt($passEnc, 'rpc_pass') : '';
         $wallet = $s['wallet_name'] ?? '';
-        $verify = ($s['rpc_tls_verify'] ?? '1') !== '0';
+        $verifyPeer = ($s['rpc_tls_verify'] ?? '1') !== '0';
+        // Disable hostname verification to support wildcard certificates;
+        // peer verification (cert chain) still applies when verifyPeer is true.
+        $verifyHost = ($s['rpc_tls_verify_host'] ?? '0') !== '0';
         return new self(new RpcClient(
             $host, $port, $user, $pass,
             $wallet === '' ? null : $wallet,
             30,
-            $verify
+            $verifyPeer,
+            $verifyHost,
         ));
     }
 

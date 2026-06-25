@@ -16,6 +16,7 @@ final class RpcClient
         private ?string $wallet = null,
         private int $timeout = 30,
         private bool $verifyTls = true,
+        private bool $verifyHost = true,
     ) {}
 
     public function call(string $method, array $params = []): mixed
@@ -41,7 +42,9 @@ final class RpcClient
             CURLOPT_TIMEOUT        => $this->timeout,
             CURLOPT_CONNECTTIMEOUT => min(10, $this->timeout),
             CURLOPT_SSL_VERIFYPEER => $this->verifyTls,
-            CURLOPT_SSL_VERIFYHOST => $this->verifyTls ? 2 : 0,
+            // CURLOPT_SSL_VERIFYHOST 2 = strict SAN match (fails for wildcard-only certs);
+            // 0 = skip hostname check (still validates cert chain if verifyTls=true).
+            CURLOPT_SSL_VERIFYHOST => ($this->verifyTls && $this->verifyHost) ? 2 : 0,
         ]);
         $resp = curl_exec($ch);
         $errno = curl_errno($ch);
