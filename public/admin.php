@@ -359,11 +359,16 @@ $dbTableInfo  = Db::getTableInfo();
     <button type="submit" id="save-btn"><?= he('set.save') ?></button>
   </form>
 
-  <div class="inline-actions">
-    <button id="btn-test-rpc"><?= he('set.test_rpc') ?></button>
-    <button id="btn-test-unlock"><?= he('set.test_unlock') ?></button>
+  <div class="test-rows">
+    <div class="test-row">
+      <button id="btn-test-rpc" class="btn-test" data-action="test_rpc"><?= he('set.test_rpc') ?></button>
+      <span id="rpc-msg" class="test-msg"></span>
+    </div>
+    <div class="test-row">
+      <button id="btn-test-unlock" class="btn-test" data-action="test_unlock"><?= he('set.test_unlock') ?></button>
+      <span id="unlock-msg" class="test-msg"></span>
+    </div>
   </div>
-  <div id="rpc-result" class="result" hidden></div>
 
   <div class="pw-section">
     <label><?= he('set.new_admin_pass') ?></label>
@@ -466,14 +471,42 @@ document.getElementById('settings-form').addEventListener('submit', async (e) =>
   showToast(d.msg || (d.ok ? 'Saved' : 'Error'), d.ok);
 });
 
-document.getElementById('btn-test-rpc').addEventListener('click', async function() {
-  const d = await ajaxPost({ action:'test_rpc', csrf:CSRF }, this);
-  showInline(document.getElementById('rpc-result'), d.ok, d.msg || (d.ok?'OK':'Error'));
-});
-document.getElementById('btn-test-unlock').addEventListener('click', async function() {
-  const d = await ajaxPost({ action:'test_unlock', csrf:CSRF }, this);
-  showInline(document.getElementById('rpc-result'), d.ok, d.msg || (d.ok?'OK':'Error'));
-});
+// ── RPC / Unlock tests ──
+const testButtons = document.querySelectorAll('.btn-test');
+function setBtnState(btn, state) {
+  btn.classList.remove('state-testing','state-ok','state-err');
+  if (state) btn.classList.add('state-' + state);
+}
+function setMsgState(el, state, text) {
+  el.classList.remove('state-testing','state-ok','state-err');
+  if (state) el.classList.add('state-' + state);
+  el.textContent = text || '';
+}
+async function runTest(btn) {
+  const msgEl = document.getElementById(btn.id === 'btn-test-rpc' ? 'rpc-msg' : 'unlock-msg');
+  // disable BOTH test buttons
+  testButtons.forEach(b => { b.disabled = true; });
+  setBtnState(btn, 'testing');
+  setMsgState(msgEl, 'testing', 'Testing…');
+  // reset the OTHER button's state visuals
+  testButtons.forEach(b => { if (b !== btn) setBtnState(b, null); });
+  try {
+    const fd = new FormData();
+    fd.set('action', btn.dataset.action);
+    fd.set('csrf', CSRF);
+    const res  = await fetch('admin.php', { method:'POST', body:fd, headers:{'X-Requested-With':'XMLHttpRequest'} });
+    const data = await res.json();
+    const state = data.ok ? 'ok' : 'err';
+    setBtnState(btn, state);
+    setMsgState(msgEl, state, data.msg || (data.ok ? 'OK' : 'Error'));
+  } catch (e) {
+    setBtnState(btn, 'err');
+    setMsgState(msgEl, 'err', 'Network error: ' + e.message);
+  } finally {
+    testButtons.forEach(b => { b.disabled = false; });
+  }
+}
+testButtons.forEach(b => b.addEventListener('click', () => runTest(b)));
 
 document.getElementById('btn-change-pw').addEventListener('click', async function() {
   const pw = document.getElementById('new-pw').value;
