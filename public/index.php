@@ -81,8 +81,6 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 
   <footer>
     <a href="admin.php"><?= he('faucet.admin_link') ?></a>
-    &middot;
-    <a href="donors.php"><?= he('donors.page_link') ?></a>
   </footer>
 </main>
 
@@ -152,7 +150,6 @@ function showResult(el, ok, html, isHtml) {
   if (isHtml) el.innerHTML = html; else el.textContent = html;
 }
 
-// ── Claim form ──
 document.getElementById('claim-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('claim-btn');
@@ -182,7 +179,6 @@ document.getElementById('claim-form').addEventListener('submit', async (e) => {
   finally  { setLoading(btn, false); }
 });
 
-// ── Payment URI generator ──
 function buildPayUri() {
   if (!faucetAddr) return '';
   const amtRaw = parseFloat(document.getElementById('donate-amount')?.value || '1');
