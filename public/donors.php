@@ -13,32 +13,40 @@ if (isset($_GET['lang']) && is_string($_GET['lang'])) {
 
 function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
-$locale = I18n::locale();
+$locale    = I18n::locale();
+$s         = Db::getAllSettings();
+$title     = $s['faucet_title'] ?? __('faucet.title');
 
 $donations = Db::fetchAll(
     'SELECT id, amount_elek, donor_name, message, created_at FROM donations ORDER BY created_at DESC LIMIT 500'
 );
-
-$total = Db::fetchOne('SELECT COUNT(*) as cnt, SUM(amount_elek) as total FROM donations');
-$totalAmount = number_format((float)($total['total'] ?? 0), 4);
-$totalCount  = (int)($total['cnt'] ?? 0);
+$agg = Db::fetchOne('SELECT COUNT(*) AS cnt, COALESCE(SUM(amount_elek),0) AS total FROM donations');
+$totalAmount = number_format((float)($agg['total'] ?? 0), 4);
+$totalCount  = (int)($agg['cnt'] ?? 0);
 ?>
 <!doctype html>
 <html lang="<?= h($locale) ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title><?= he('donors.title') ?></title>
+<title><?= he('donors.title') ?> &mdash; <?= h($title) ?></title>
 <link rel="stylesheet" href="assets/style.css">
+<link rel="icon" type="image/svg+xml" href="assets/logo.svg">
 </head>
 <body>
-<main class="card donors-card">
+<header class="site-header">
+  <a href="index.php" class="site-logo" aria-label="<?= h($title) ?>">
+    <img src="assets/logo.svg" alt="Elektron Net" width="36" height="36">
+    <span><?= h($title) ?></span>
+  </a>
   <div class="lang-switch">
     <?php foreach (I18n::LOCALES as $code => $name): ?>
       <a class="<?= $code === $locale ? 'active' : '' ?>" href="?lang=<?= h($code) ?>"><?= h($code) ?></a>
     <?php endforeach; ?>
   </div>
+</header>
 
+<main class="card donors-card">
   <h1><?= he('donors.title') ?></h1>
   <p class="lead"><?= he('donors.lead') ?></p>
 

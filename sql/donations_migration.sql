@@ -1,4 +1,5 @@
--- Migration for existing installations: adds donations table
+-- Migration for existing installations: adds donations support
+-- Safe to run multiple times (IF NOT EXISTS guards every statement)
 -- Run: mysql -u <user> -p <db> < sql/donations_migration.sql
 
 CREATE TABLE IF NOT EXISTS donations (
