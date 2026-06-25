@@ -16,7 +16,6 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
 $method = (string)($_SERVER['REQUEST_METHOD'] ?? '');
-$action = (string)($_POST['action'] ?? $_GET['action'] ?? 'claim');
 $ip     = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
 
 $reply = static function (bool $ok, string $msg = '', array $extra = []): never {
@@ -24,48 +23,9 @@ $reply = static function (bool $ok, string $msg = '', array $extra = []): never 
     exit;
 };
 
-// ── Donate endpoint ──────────────────────────────────────────────────────────
-if ($action === 'donate') {
-    if ($method !== 'POST') { http_response_code(405); $reply(false, __('err.method')); }
-
-    $csrf = (string)($_POST['csrf'] ?? '');
-    if (!Csrf::check($csrf)) { http_response_code(403); $reply(false, __('err.csrf')); }
-
-    $amountRaw = trim((string)($_POST['donate_amount'] ?? ''));
-    $amount    = (float)str_replace(',', '.', $amountRaw);
-    if ($amount <= 0 || $amount > 1000000) {
-        http_response_code(400);
-        $reply(false, __('donate.err.amount'));
-    }
-
-    // simple rate-limit: max 10 donation reports per IP per hour
-    $recentCount = (int)Db::fetchValue(
-        'SELECT COUNT(*) FROM donations WHERE ip = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)',
-        [RateLimiter::ipToBin($ip)]
-    );
-    if ($recentCount >= 10) { http_response_code(429); $reply(false, __('err.cooldown_ip', ['hours' => '1'])); }
-
-    $name    = mb_substr(trim((string)($_POST['donor_name'] ?? '')), 0, 100);
-    $message = mb_substr(trim((string)($_POST['donor_msg']  ?? '')), 0, 500);
-
-    Db::exec(
-        'INSERT INTO donations (amount_elek, donor_name, message, ip) VALUES (?, ?, ?, ?)',
-        [
-            number_format($amount, 8, '.', ''),
-            $name !== '' ? $name : null,
-            $message !== '' ? $message : null,
-            RateLimiter::ipToBin($ip),
-        ]
-    );
-
-    $reply(true, '', ['message' => __('donate.thanks')]);
-}
-
-// ── Claim endpoint (default) ─────────────────────────────────────────────────
 if ($method !== 'POST') {
     http_response_code(405);
-    echo json_encode(['ok' => false, 'error' => __('err.method')]);
-    exit;
+    $reply(false, __('err.method'));
 }
 
 $csrf = (string)($_POST['csrf'] ?? '');
@@ -94,7 +54,7 @@ if ($err !== null) {
     $reply(false, $err);
 }
 
-$s = Db::getAllSettings();
+$s          = Db::getAllSettings();
 $amountElek = (string)($s['amount_elek'] ?? '0');
 $amountSat  = RateLimiter::elekToSat($amountElek);
 if ($amountSat <= 0) {
