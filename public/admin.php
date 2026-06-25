@@ -22,7 +22,7 @@ if (isset($_GET['lang']) && is_string($_GET['lang'])) {
 
 Auth::gcSessions();
 
-$ip = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
+$ip     = (string)($_SERVER['REMOTE_ADDR'] ?? '0.0.0.0');
 $action = (string)($_GET['action'] ?? $_POST['action'] ?? '');
 
 if ($action === 'logout') {
@@ -33,21 +33,19 @@ if ($action === 'logout') {
 
 $loginError = null;
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && $action === 'login') {
-    $u = trim((string)($_POST['username'] ?? ''));
-    $p = (string)($_POST['password'] ?? '');
+    $u   = trim((string)($_POST['username'] ?? ''));
+    $p   = (string)($_POST['password'] ?? '');
     $res = Auth::login($u, $p, $ip);
-    if ($res['ok']) {
-        header('Location: admin.php');
-        exit;
-    }
+    if ($res['ok']) { header('Location: admin.php'); exit; }
     $loginError = $res['error'];
 }
 
-$sess = Auth::session();
+$sess   = Auth::session();
 $locale = I18n::locale();
 
 if ($sess === null) {
-    ?><!doctype html><html lang="<?= h($locale) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    ?>
+    <!doctype html><html lang="<?= h($locale) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
     <title><?= he('admin.login') ?></title><link rel="stylesheet" href="assets/style.css"></head><body>
     <main class="card">
       <div class="lang-switch">
@@ -63,17 +61,35 @@ if ($sess === null) {
         <label><?= he('admin.password') ?><input type="password" name="password" required></label>
         <button type="submit"><?= he('admin.signin') ?></button>
       </form>
-    </main></body></html><?php
+    </main></body></html>
+    <?php
     exit;
 }
 
-$adminId = (int)$sess['admin_id'];
+$adminId    = (int)$sess['admin_id'];
 $testResult = null;
+$isAjax     = (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest');
+
+// ── AJAX: live stats ──────────────────────────────────────────────────────
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'stats') {
+    header('Content-Type: application/json');
+    $walletBal = null; $walletErr = null;
+    try { $walletBal = Wallet::fromSettings()->getBalance(); } catch (\Throwable $e) { $walletErr = $e->getMessage(); }
+    echo json_encode([
+        'totalSat'    => Stats::totalSentSat(),
+        'totalCount'  => Stats::totalSentCount(),
+        'dailySat'    => Stats::spentLastDaySat(),
+        'hourlySat'   => Stats::spentLastHourSat(),
+        'walletBal'   => $walletBal,
+        'walletErr'   => $walletErr,
+    ]);
+    exit;
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!Csrf::check((string)($_POST['csrf'] ?? ''))) {
-        http_response_code(403);
-        exit('CSRF token invalid');
+        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok' => false, 'error' => 'CSRF']); exit; }
+        http_response_code(403); exit('CSRF token invalid');
     }
     if ($action === 'save_settings') {
         $fields = [
@@ -88,40 +104,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             }
         }
         Db::setSetting('rpc_tls_verify', empty($_POST['rpc_tls_verify']) ? '0' : '1');
-        if (!empty($_POST['rpc_pass'])) {
-            Db::setSetting('rpc_pass_enc', Crypto::encrypt((string)$_POST['rpc_pass'], 'rpc_pass'));
-        }
-        if (!empty($_POST['wallet_pass'])) {
-            Db::setSetting('wallet_pass_enc', Crypto::encrypt((string)$_POST['wallet_pass'], 'wallet_pass'));
-        }
-        if (!empty($_POST['hcaptcha_secret'])) {
-            Db::setSetting('hcaptcha_secret_enc', Crypto::encrypt((string)$_POST['hcaptcha_secret'], 'hcaptcha_secret'));
-        }
+        if (!empty($_POST['rpc_pass'])) Db::setSetting('rpc_pass_enc', Crypto::encrypt((string)$_POST['rpc_pass'], 'rpc_pass'));
+        if (!empty($_POST['wallet_pass'])) Db::setSetting('wallet_pass_enc', Crypto::encrypt((string)$_POST['wallet_pass'], 'wallet_pass'));
+        if (!empty($_POST['hcaptcha_secret'])) Db::setSetting('hcaptcha_secret_enc', Crypto::encrypt((string)$_POST['hcaptcha_secret'], 'hcaptcha_secret'));
         Logger::audit($adminId, 'settings_saved', ['fields' => $fields]);
-        header('Location: admin.php?saved=1');
-        exit;
+        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok' => true, 'msg' => he('admin.saved')]); exit; }
+        header('Location: admin.php?saved=1'); exit;
     }
     if ($action === 'change_password') {
         $new = (string)($_POST['new_password'] ?? '');
         if (strlen($new) >= 10) {
-            Db::exec(
-                'UPDATE admin_users SET password_hash = ? WHERE id = ?',
-                [password_hash($new, PASSWORD_ARGON2ID), $adminId]
-            );
+            Db::exec('UPDATE admin_users SET password_hash = ? WHERE id = ?', [password_hash($new, PASSWORD_ARGON2ID), $adminId]);
             Logger::audit($adminId, 'password_changed');
-            header('Location: admin.php?pw=1');
-            exit;
+            header('Location: admin.php?pw=1'); exit;
         }
-        header('Location: admin.php?pw=short');
-        exit;
+        header('Location: admin.php?pw=short'); exit;
     }
     if ($action === 'test_rpc') {
-        try {
-            $info = Wallet::fromSettings()->testConnection();
-            $testResult = ['ok' => true, 'info' => $info];
-        } catch (\Throwable $e) {
-            $testResult = ['ok' => false, 'error' => $e->getMessage()];
-        }
+        try { $testResult = ['ok' => true, 'info' => Wallet::fromSettings()->testConnection()]; }
+        catch (\Throwable $e) { $testResult = ['ok' => false, 'error' => $e->getMessage()]; }
     }
     if ($action === 'test_unlock') {
         try {
@@ -129,31 +130,40 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $w->rpc()->call('walletpassphrase', [Crypto::decrypt((string)Db::getSetting('wallet_pass_enc', ''), 'wallet_pass'), 1]);
             $w->rpc()->call('walletlock', []);
             $testResult = ['ok' => true, 'info' => ['unlocked_and_locked_ok' => true]];
-        } catch (\Throwable $e) {
-            $testResult = ['ok' => false, 'error' => $e->getMessage()];
-        }
+        } catch (\Throwable $e) { $testResult = ['ok' => false, 'error' => $e->getMessage()]; }
+    }
+    if ($action === 'delete_donation' && isset($_POST['donation_id'])) {
+        $did = (int)$_POST['donation_id'];
+        Db::exec('DELETE FROM donations WHERE id = ?', [$did]);
+        Logger::audit($adminId, 'donation_deleted', ['donation_id' => $did]);
+        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok' => true]); exit; }
+        header('Location: admin.php#sec-donations'); exit;
     }
 }
 
-$s = Db::getAllSettings();
+$s    = Db::getAllSettings();
 $csrf = Csrf::token();
 
-$totalSentSat = Stats::totalSentSat();
-$totalCount   = Stats::totalSentCount();
-$dailySat     = Stats::spentLastDaySat();
-$hourlySat    = Stats::spentLastHourSat();
+$totalSentSat    = Stats::totalSentSat();
+$totalCount      = Stats::totalSentCount();
+$dailySat        = Stats::spentLastDaySat();
+$hourlySat       = Stats::spentLastHourSat();
 $dailyBudgetSat  = RateLimiter::elekToSat($s['daily_budget']  ?? '0');
 $hourlyBudgetSat = RateLimiter::elekToSat($s['hourly_budget'] ?? '0');
 
-$walletBalance = null;
-$walletError = null;
+$walletBalance = null; $walletError = null;
 try { $walletBalance = Wallet::fromSettings()->getBalance(); }
 catch (\Throwable $e) { $walletError = $e->getMessage(); }
 
-$claims = Stats::recentClaims(50);
+$claims    = Stats::recentClaims(50);
 $histogram = Stats::last24hHistogram();
-$explorer = $s['explorer_url'] ?? '';
-?><!doctype html>
+$explorer  = $s['explorer_url'] ?? '';
+
+$donations = Db::fetchAll(
+    'SELECT id, amount_elek, donor_name, message, created_at FROM donations ORDER BY created_at DESC LIMIT 100'
+);
+?>
+<!doctype html>
 <html lang="<?= h($locale) ?>"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= he('admin.title') ?></title><link rel="stylesheet" href="assets/style.css"></head><body class="admin">
 <header class="bar">
@@ -167,24 +177,39 @@ $explorer = $s['explorer_url'] ?? '';
     <a href="?action=logout"><?= he('admin.logout') ?></a>
   </nav>
 </header>
+
+<div id="toast" class="toast" hidden></div>
+
 <main>
-  <?php if (isset($_GET['saved'])): ?><div class="result ok"><?= he('admin.saved') ?></div><?php endif; ?>
-  <?php if (isset($_GET['pw'])): ?>
-    <div class="result <?= $_GET['pw']==='1'?'ok':'err' ?>"><?= he($_GET['pw']==='1' ? 'admin.pw_changed' : 'admin.pw_short') ?></div>
-  <?php endif; ?>
   <?php if ($testResult !== null): ?>
-    <div class="result <?= $testResult['ok']?'ok':'err' ?>">
+    <div class="result <?= $testResult['ok'] ? 'ok' : 'err' ?>">
       <?= $testResult['ok']
             ? he('admin.test_ok') . ' ' . h(json_encode($testResult['info']))
             : he('admin.test_failed') . ' ' . h($testResult['error']) ?>
     </div>
   <?php endif; ?>
 
-  <section class="stats">
-    <div class="kpi"><div class="label"><?= he('kpi.total_given') ?></div><div class="value"><?= h(RateLimiter::satToElek($totalSentSat)) ?> ELEK</div><div class="sub"><?= he('kpi.payouts', ['count' => $totalCount]) ?></div></div>
-    <div class="kpi"><div class="label"><?= he('kpi.today') ?></div><div class="value"><?= h(RateLimiter::satToElek($dailySat)) ?> ELEK</div><div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($dailyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0, $dailyBudgetSat - $dailySat)))]) ?></div></div>
-    <div class="kpi"><div class="label"><?= he('kpi.this_hour') ?></div><div class="value"><?= h(RateLimiter::satToElek($hourlySat)) ?> ELEK</div><div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($hourlyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0, $hourlyBudgetSat - $hourlySat)))]) ?></div></div>
-    <div class="kpi"><div class="label"><?= he('kpi.wallet_balance') ?></div><div class="value"><?= $walletBalance !== null ? h($walletBalance) . ' ELEK' : '—' ?></div><div class="sub"><?= $walletError ? he('kpi.rpc_error', ['error' => h($walletError)]) : he('kpi.via_getbalance') ?></div></div>
+  <section class="stats" id="stats-section">
+    <div class="kpi" id="kpi-total">
+      <div class="label"><?= he('kpi.total_given') ?></div>
+      <div class="value"><?= h(RateLimiter::satToElek($totalSentSat)) ?> ELEK</div>
+      <div class="sub"><?= he('kpi.payouts', ['count' => $totalCount]) ?></div>
+    </div>
+    <div class="kpi" id="kpi-daily">
+      <div class="label"><?= he('kpi.today') ?></div>
+      <div class="value"><?= h(RateLimiter::satToElek($dailySat)) ?> ELEK</div>
+      <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($dailyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0, $dailyBudgetSat - $dailySat)))]) ?></div>
+    </div>
+    <div class="kpi" id="kpi-hourly">
+      <div class="label"><?= he('kpi.this_hour') ?></div>
+      <div class="value"><?= h(RateLimiter::satToElek($hourlySat)) ?> ELEK</div>
+      <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($hourlyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0, $hourlyBudgetSat - $hourlySat)))]) ?></div>
+    </div>
+    <div class="kpi" id="kpi-wallet">
+      <div class="label"><?= he('kpi.wallet_balance') ?></div>
+      <div class="value"><?= $walletBalance !== null ? h($walletBalance) . ' ELEK' : '—' ?></div>
+      <div class="sub"><?= $walletError ? he('kpi.rpc_error', ['error' => h($walletError)]) : he('kpi.via_getbalance') ?></div>
+    </div>
   </section>
 
   <section class="histogram">
@@ -232,9 +257,44 @@ $explorer = $s['explorer_url'] ?? '';
     </table>
   </section>
 
+  <section id="sec-donations">
+    <h2><?= he('sec.donations') ?></h2>
+    <?php if (empty($donations)): ?>
+      <p class="muted"><?= he('donors.none') ?></p>
+    <?php else: ?>
+    <table>
+      <thead><tr>
+        <th><?= he('tbl.time') ?></th>
+        <th><?= he('tbl.donor') ?></th>
+        <th><?= he('tbl.message') ?></th>
+        <th><?= he('tbl.amount') ?></th>
+        <th></th>
+      </tr></thead>
+      <tbody>
+        <?php foreach ($donations as $d): ?>
+          <tr id="don-<?= (int)$d['id'] ?>">
+            <td><?= h(substr((string)$d['created_at'], 0, 16)) ?></td>
+            <td><?= h((string)($d['donor_name'] ?? '—')) ?></td>
+            <td><?= h((string)($d['message'] ?? '')) ?></td>
+            <td><?= h(rtrim(rtrim(number_format((float)$d['amount_elek'], 8), '0'), '.')) ?> ELEK</td>
+            <td>
+              <form class="del-donation-form" data-id="<?= (int)$d['id'] ?>" method="post" style="display:inline">
+                <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+                <input type="hidden" name="action" value="delete_donation">
+                <input type="hidden" name="donation_id" value="<?= (int)$d['id'] ?>">
+                <button type="submit" class="btn-del" title="Delete">&times;</button>
+              </form>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+    <?php endif; ?>
+  </section>
+
   <section class="settings">
     <h2><?= he('sec.settings') ?></h2>
-    <form method="post">
+    <form id="settings-form" method="post">
       <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
       <input type="hidden" name="action" value="save_settings">
 
@@ -276,10 +336,10 @@ $explorer = $s['explorer_url'] ?? '';
         <label><?= he('set.captcha_secret') ?><input type="password" name="hcaptcha_secret" autocomplete="new-password"></label>
       </fieldset>
 
-      <button type="submit"><?= he('set.save') ?></button>
+      <button type="submit" id="save-btn"><?= he('set.save') ?></button>
     </form>
 
-    <form method="post" class="inline">
+    <form method="post" class="inline" id="test-form">
       <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
       <button type="submit" name="action" value="test_rpc"><?= he('set.test_rpc') ?></button>
       <button type="submit" name="action" value="test_unlock"><?= he('set.test_unlock') ?></button>
@@ -293,4 +353,82 @@ $explorer = $s['explorer_url'] ?? '';
     </form>
   </section>
 </main>
+
+<script>
+const SAVED_MSG   = <?= json_encode(he('admin.saved'), JSON_THROW_ON_ERROR) ?>;
+const CSRF_TOKEN  = <?= json_encode($csrf, JSON_THROW_ON_ERROR) ?>;
+const DAILY_SAT   = <?= $dailyBudgetSat ?>;
+const HOURLY_SAT  = <?= $hourlyBudgetSat ?>;
+
+function satToElek(sat) {
+  return (sat / 1e8).toFixed(8).replace(/\.?0+$/, '') || '0';
+}
+
+// ── Toast ───────────────────────────────────────────────
+const toast = document.getElementById('toast');
+function showToast(msg, ok = true) {
+  toast.textContent = msg;
+  toast.className = 'toast ' + (ok ? 'ok' : 'err');
+  toast.hidden = false;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.hidden = true; }, 3000);
+}
+
+// ── AJAX settings save ──────────────────────────────────────
+document.getElementById('settings-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  try {
+    const res  = await fetch('admin.php', {
+      method: 'POST',
+      body: new FormData(e.target),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    const data = await res.json();
+    showToast(data.msg || SAVED_MSG, data.ok);
+  } catch {
+    showToast('Network error', false);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── Live stats auto-refresh every 60s ─────────────────────────
+function refreshStats() {
+  fetch('admin.php?ajax=stats', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    .then(r => r.json())
+    .then(d => {
+      const tv = (id, val, sub) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.querySelector('.value').textContent = val;
+        if (sub !== undefined) el.querySelector('.sub').textContent = sub;
+      };
+      tv('kpi-total', satToElek(d.totalSat) + ' ELEK');
+      const dailyRem  = Math.max(0, DAILY_SAT  - d.dailySat);
+      const hourlyRem = Math.max(0, HOURLY_SAT - d.hourlySat);
+      tv('kpi-daily',  satToElek(d.dailySat)  + ' ELEK');
+      tv('kpi-hourly', satToElek(d.hourlySat) + ' ELEK');
+      if (d.walletBal !== null) tv('kpi-wallet', d.walletBal + ' ELEK');
+    })
+    .catch(() => {});
+}
+setInterval(refreshStats, 60000);
+
+// ── Delete donation (AJAX) ────────────────────────────────────
+document.querySelectorAll('.del-donation-form').forEach(form => {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!confirm('Delete?')) return;
+    const id = form.dataset.id;
+    const res  = await fetch('admin.php', {
+      method: 'POST', body: new FormData(form),
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    const data = await res.json();
+    if (data.ok) document.getElementById('don-' + id)?.remove();
+  });
+});
+</script>
 </body></html>
