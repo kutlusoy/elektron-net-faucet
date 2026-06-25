@@ -19,15 +19,15 @@ html, body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* ── Page container (max-width: header + content stay inside this box) ── */
-.page {
+/* ── Page container — unified max-width across all pages ── */
+.page,
+.page.wide,
+.page.admin {
     width: 100%;
-    max-width: 560px;
+    max-width: 800px;
     margin: 0 auto;
     padding: 28px 16px 60px;
 }
-.page.wide  { max-width: 840px; }
-.page.admin { max-width: 960px; }
 
 /* ── Page header card ── */
 .page-header {
@@ -153,12 +153,12 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 }
 .uri-box-content {
     flex: 1;
-    min-width: 0;                      /* allows flex child to shrink below content size */
+    min-width: 0;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: .82rem;
     color: #d4e8ff;
     line-height: 1.65;
-    word-break: break-all;             /* break anywhere so long names/addresses wrap */
+    word-break: break-all;
     overflow-wrap: break-word;
     white-space: pre-wrap;
 }
@@ -175,7 +175,7 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
     cursor: pointer;
     flex-shrink: 0;
     white-space: nowrap;
-    align-self: flex-start;            /* pin to top when URI wraps to multiple lines */
+    align-self: flex-start;
 }
 .btn-copy:hover { opacity: .9; }
 .btn-copy.copied { background: var(--ok); }
