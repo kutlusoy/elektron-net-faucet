@@ -6,6 +6,7 @@
     --accent: #5bb8f5;
     --ok:     #2ed882;
     --err:    #f06060;
+    --warn:   #ffcc66;
     --border: #252d3a;
     --radius: 12px;
 }
@@ -19,7 +20,6 @@ html, body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* ── Page container — unified max-width across all pages ── */
 .page,
 .page.wide,
 .page.admin {
@@ -29,7 +29,6 @@ a:hover { text-decoration: underline; }
     padding: 28px 16px 60px;
 }
 
-/* ── Page header card ── */
 .page-header {
     background: var(--card);
     border: 1px solid var(--border);
@@ -42,8 +41,6 @@ a:hover { text-decoration: underline; }
     align-items: center;
     gap: 12px;
 }
-
-/* Logo: link wraps the image only — site name is a separate <h1> below */
 .site-logo {
     display: inline-block;
     line-height: 0;
@@ -55,8 +52,6 @@ a:hover { text-decoration: underline; }
     transition: transform .15s ease;
 }
 .site-logo:hover img { transform: scale(1.04); }
-
-/* Site name — semantic h1, NOT linked */
 .site-name {
     margin: 0;
     font-size: 1.35rem;
@@ -69,8 +64,6 @@ a:hover { text-decoration: underline; }
     .site-logo img { width: 52px; height: 52px; }
     .site-name     { font-size: 1.1rem; }
 }
-
-/* Header nav row (lang + admin badge/logout) */
 .header-nav {
     display: flex;
     align-items: center;
@@ -88,7 +81,6 @@ a:hover { text-decoration: underline; }
 .logout-link { color: var(--err); font-size: .82rem; }
 .logout-link:hover { text-decoration: underline; }
 
-/* ── Lang switch ── */
 .lang-switch { display: inline-flex; gap: 5px; }
 .lang-switch a {
     color: var(--muted); font-size: .72rem;
@@ -97,7 +89,6 @@ a:hover { text-decoration: underline; }
 }
 .lang-switch a.active { background: var(--accent); color: #05111c; }
 
-/* ── Card ── */
 .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -110,7 +101,6 @@ a:hover { text-decoration: underline; }
 .card .lead   { color: var(--muted); margin: 0 0 10px; }
 .card .amount { font-weight: 600; color: var(--accent); margin: 0 0 20px; }
 
-/* ── Forms ── */
 form label { display: block; font-size: .85rem; color: var(--muted); margin: 12px 0 4px; }
 input, textarea, button, select {
     width: 100%; padding: 10px 12px; border-radius: 8px;
@@ -130,7 +120,6 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .muted { color: var(--muted); }
 .mono  { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .82rem; }
 
-/* ── Donate section ── */
 .donate-section h2    { margin: 0 0 6px; font-size: 1.15rem; }
 .donate-section .lead { color: var(--muted); margin: 0 0 18px; font-size: .9rem; }
 .donate-inputs {
@@ -139,7 +128,6 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .donate-inputs > div { flex: 1; min-width: 140px; }
 .donate-inputs label { margin-top: 0; }
 
-/* URI code box */
 .uri-box {
     background: #1e2635;
     border: 1px solid var(--accent);
@@ -180,7 +168,6 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .btn-copy:hover { opacity: .9; }
 .btn-copy.copied { background: var(--ok); }
 
-/* Info breakdown below URI */
 .pay-info {
     background: #0d1218;
     border: 1px solid var(--border);
@@ -197,17 +184,14 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .pi-row:last-child { border-bottom: none; }
 .pi-label { color: var(--muted); width: 70px; flex-shrink: 0; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
 .pi-value {
-    flex: 1;
-    min-width: 0;
-    word-break: break-all;
-    overflow-wrap: break-word;
+    flex: 1; min-width: 0;
+    word-break: break-all; overflow-wrap: break-word;
 }
 .pi-value.mono { font-size: .78rem; }
 
 .donate-hint { font-size: .82rem; color: var(--muted); margin: 0 0 12px; }
 .donate-donors-link { text-align: right; font-size: .85rem; }
 
-/* ── Donors page ── */
 .donors-total { font-weight: 600; color: var(--accent); margin: 0 0 18px; }
 .donors-table-wrap { overflow-x: auto; }
 .donors-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
@@ -220,11 +204,10 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .donors-date   { white-space: nowrap; color: var(--muted); font-size: .8rem; }
 .donors-conf   { white-space: nowrap; font-size: .78rem; text-align: center; }
 .conf-ok       { color: var(--ok); }
-.conf-pending  { color: #ffcc66; }
+.conf-pending  { color: var(--warn); }
 .donors-tx     { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .donors-amount { white-space: nowrap; color: var(--ok); font-weight: 600; text-align: right; }
 
-/* ── Toast ── */
 .toast {
     position: fixed; top: 20px; right: 20px; z-index: 1000;
     padding: 12px 20px; border-radius: 8px; font-size: .9rem; font-weight: 600;
@@ -233,7 +216,6 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .toast.ok  { background: var(--ok);  color: #051c0f; }
 .toast.err { background: var(--err); color: #fff; }
 
-/* ── Admin layout ── */
 body.admin { background: var(--bg); }
 .stats {
     display: grid;
@@ -261,7 +243,7 @@ th { color: var(--muted); font-weight: 500; font-size: .76rem; text-transform: u
 .table-scroll { overflow-x: auto; }
 .status-sent    { color: var(--ok); }
 .status-failed  { color: var(--err); }
-.status-pending { color: #ffcc66; }
+.status-pending { color: var(--warn); }
 .status-legacy  { color: var(--err); font-weight: 600; font-size: .78rem; }
 .status-active  { color: var(--ok);  font-size: .78rem; }
 .err-text { color: var(--err); }
@@ -282,4 +264,32 @@ fieldset legend { color: var(--muted); padding: 0 6px; font-size: .85rem; }
 .checkbox-label { display: flex !important; align-items: center; gap: 8px; margin-top: 14px !important; color: var(--fg) !important; font-size: .9rem !important; }
 .checkbox-label input { width: auto; margin: 0; }
 .hint { color: var(--muted); font-size: .82rem; margin: 4px 0 0; }
-.hint.warn { color: #ffcc66; }
+.hint.warn { color: var(--warn); }
+
+/* ── Test buttons (per-row state + inline message) ── */
+.test-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.test-row  { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.btn-test  {
+    width: auto; margin: 0; padding: 8px 16px;
+    font-size: .85rem; font-weight: 600;
+    background: var(--accent); color: #05111c;
+    border: 1px solid transparent; border-radius: 6px;
+    cursor: pointer; flex-shrink: 0;
+    transition: background .15s, color .15s, border-color .15s;
+}
+.btn-test:disabled { cursor: wait; opacity: 1; }
+.btn-test.state-testing { background: var(--warn); color: #2a1a00; }
+.btn-test.state-ok      { background: var(--ok);   color: #051c0f; }
+.btn-test.state-err     { background: var(--err);  color: #2a0606; }
+
+.test-msg {
+    flex: 1; min-width: 200px;
+    padding: 8px 12px; border-radius: 6px;
+    font-size: .82rem; line-height: 1.4;
+    word-break: break-word; overflow-wrap: break-word;
+    background: transparent;
+}
+.test-msg:empty { padding: 0; }
+.test-msg.state-testing { background: rgba(255,204,102,.10); color: var(--warn); border: 1px solid rgba(255,204,102,.25); }
+.test-msg.state-ok      { background: rgba(46,216,130,.10); color: var(--ok);   border: 1px solid rgba(46,216,130,.25); }
+.test-msg.state-err     { background: rgba(240,96,96,.10);  color: var(--err);  border: 1px solid rgba(240,96,96,.25); }
