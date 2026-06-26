@@ -24,10 +24,22 @@ a:hover { text-decoration: underline; }
 .page.wide,
 .page.admin {
     width: 100%;
-    max-width: 800px;
+    max-width: 600px;
     margin: 0 auto;
     padding: 28px 16px 60px;
 }
+
+/* Standalone form actions — centers a single submit button. Forms that
+ * have multiple controls in a row keep their own layout. */
+.form-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 16px;
+}
+.form-actions button { margin-top: 0; }
+
+/* Each test / action form is a tiny standalone block; give it air. */
+.action-form { margin-top: 14px; }
 
 .page-header {
     background: var(--card);
@@ -134,25 +146,14 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
     border: 1px solid var(--accent);
     border-radius: 10px;
     padding: 14px 16px;
-    display: flex; align-items: flex-start; gap: 12px;
     margin-bottom: 12px; overflow: hidden;
 }
 .uri-box-content {
-    flex: 1; min-width: 0;
+    display: block; min-width: 0;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: .82rem; color: #d4e8ff; line-height: 1.65;
     word-break: break-all; overflow-wrap: break-word; white-space: pre-wrap;
 }
-.btn-copy {
-    margin: 0; padding: 7px 14px;
-    font-size: .82rem; font-weight: 600;
-    background: var(--accent); color: #05111c;
-    border: 0; border-radius: 6px;
-    cursor: pointer; flex-shrink: 0; white-space: nowrap;
-    align-self: flex-start;
-}
-.btn-copy:hover  { background: #7ac6f8; }
-.btn-copy.copied { background: var(--ok); }
 
 .pay-info {
     background: #0d1218;
@@ -191,14 +192,6 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .donors-tx     { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .donors-amount { white-space: nowrap; color: var(--ok); font-weight: 600; text-align: right; }
 
-.toast {
-    position: fixed; top: 20px; right: 20px; z-index: 1000;
-    padding: 12px 20px; border-radius: 8px; font-size: .9rem; font-weight: 600;
-    box-shadow: 0 4px 24px rgba(0,0,0,.4); transition: opacity .2s;
-}
-.toast.ok  { background: var(--ok);  color: #051c0f; }
-.toast.err { background: var(--err); color: #fff; }
-
 /* ── Admin layout ── */
 body.admin { background: var(--bg); }
 .stats {
@@ -228,54 +221,10 @@ th { color: var(--muted); font-weight: 500; font-size: .76rem; text-transform: u
 .status-sent    { color: var(--ok); }
 .status-failed  { color: var(--err); }
 .status-pending { color: var(--warn); }
-.status-legacy  { color: var(--err); font-weight: 600; font-size: .78rem; }
-.status-active  { color: var(--ok);  font-size: .78rem; }
 .err-text { color: var(--err); }
 fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 14px 0; padding: 12px 16px; }
 fieldset legend { color: var(--muted); padding: 0 6px; font-size: .85rem; }
-.inline-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-.inline-actions button { margin: 0; }
-.pw-section { margin-top: 18px; }
-.pw-section > label { display: block; font-size: .85rem; color: var(--muted); margin: 0 0 6px; }
-.pw-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.pw-row input  { flex: 1; min-width: 200px; margin: 0; }
-.pw-row button { margin: 0; }
-.btn-del {
-    padding: 4px 10px; margin: 0; font-size: .76rem; font-weight: 600;
-    background: transparent; color: var(--err);
-    border: 1px solid var(--err); border-radius: 4px;
-}
-.btn-del:hover { background: rgba(240,96,96,.12); }
 .checkbox-label { display: flex !important; align-items: center; gap: 8px; margin-top: 14px !important; color: var(--fg) !important; font-size: .9rem !important; }
 .checkbox-label input { width: auto; margin: 0; }
 .hint { color: var(--muted); font-size: .82rem; margin: 4px 0 0; }
 .hint.warn { color: var(--warn); }
-
-/* ── Test buttons ── */
-.test-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
-.test-row  { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.btn-test  {
-    margin: 0; padding: 8px 16px;
-    font-size: .85rem; font-weight: 600;
-    background: var(--accent); color: #05111c;
-    border: 1px solid transparent; border-radius: 6px;
-    cursor: pointer; flex-shrink: 0;
-    transition: background .15s, color .15s, border-color .15s;
-}
-.btn-test:hover         { background: #7ac6f8; }
-.btn-test:disabled      { cursor: wait; opacity: 1; }
-.btn-test.state-testing { background: var(--warn); color: #2a1a00; }
-.btn-test.state-ok      { background: var(--ok);   color: #051c0f; }
-.btn-test.state-err     { background: var(--err);  color: #2a0606; }
-
-.test-msg {
-    flex: 1; min-width: 200px;
-    padding: 8px 12px; border-radius: 6px;
-    font-size: .82rem; line-height: 1.4;
-    word-break: break-word; overflow-wrap: break-word;
-    background: transparent;
-}
-.test-msg:empty { padding: 0; }
-.test-msg.state-testing { background: rgba(255,204,102,.10); color: var(--warn); border: 1px solid rgba(255,204,102,.25); }
-.test-msg.state-ok      { background: rgba(46,216,130,.10); color: var(--ok);   border: 1px solid rgba(46,216,130,.25); }
-.test-msg.state-err     { background: rgba(240,96,96,.10);  color: var(--err);  border: 1px solid rgba(240,96,96,.25); }
