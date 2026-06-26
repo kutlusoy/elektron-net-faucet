@@ -164,22 +164,4 @@ final class Db
         }
     }
 
-    /**
-     * Returns table info for the current database (for admin DB maintenance).
-     * @return array<int,array<string,mixed>>
-     */
-    public static function getTableInfo(): array
-    {
-        try {
-            return self::fetchAll(
-                "SELECT TABLE_NAME, COALESCE(TABLE_ROWS,0) AS TABLE_ROWS,
-                        COALESCE(DATA_LENGTH + INDEX_LENGTH, 0) AS total_bytes, ENGINE
-                 FROM information_schema.TABLES
-                 WHERE TABLE_SCHEMA = DATABASE()
-                 ORDER BY TABLE_NAME"
-            );
-        } catch (\Throwable) {
-            return [];
-        }
-    }
 }

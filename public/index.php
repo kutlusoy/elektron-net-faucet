@@ -10,6 +10,7 @@ use ElektronFaucet\Csrf;
 use ElektronFaucet\Stats;
 use ElektronFaucet\RateLimiter;
 use ElektronFaucet\I18n;
+use ElektronFaucet\Flash;
 
 if (isset($_GET['lang']) && is_string($_GET['lang'])) {
     I18n::setLocale($_GET['lang']);
@@ -26,6 +27,19 @@ $explorer    = $s['explorer_url'] ?? '';
 $totalSent   = RateLimiter::satToElek(Stats::totalSentSat());
 $locale      = I18n::locale();
 $faucetAddr  = trim((string)($s['sender_addr'] ?? ''));
+
+// The flash payload may carry the txid behind a NUL separator so we can
+// render an explorer link on success without leaking it into the URL bar.
+$flash    = Flash::take();
+$flashTx  = null;
+$flashMsg = null;
+if ($flash !== null) {
+    $parts    = explode("\0", $flash['msg'], 2);
+    $flashMsg = $parts[0];
+    if ($flash['ok'] && isset($parts[1]) && $parts[1] !== '') {
+        $flashTx = $parts[1];
+    }
+}
 
 function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 ?>
@@ -63,7 +77,18 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
     <?= he('faucet.total_given', ['amount' => h($totalSent)]) ?>
   </p>
 
-  <form id="claim-form" autocomplete="off">
+  <?php if ($flash !== null): ?>
+    <div class="result <?= $flash['ok'] ? 'ok' : 'err' ?>">
+      <?= h((string)$flashMsg) ?>
+      <?php if ($flashTx !== null && $explorer !== ''): ?>
+        <a target="_blank" rel="noopener" href="<?= h($explorer . $flashTx) ?>"><?= h($flashTx) ?></a>
+      <?php elseif ($flashTx !== null): ?>
+        <?= h($flashTx) ?>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
+
+  <form method="post" action="api.php" autocomplete="off">
     <label for="address"><?= he('faucet.your_address') ?></label>
     <input id="address" name="address" type="text" required
            pattern="^[Bb][Ee]1[A-Za-z0-9]{6,87}$"
@@ -74,39 +99,26 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
     <?php endif; ?>
 
     <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-    <button type="submit" id="claim-btn"><?= he('faucet.submit') ?></button>
+    <div class="form-actions"><button type="submit"><?= he('faucet.submit') ?></button></div>
   </form>
-
-  <div id="result" class="result" hidden></div>
 
   <footer>
     <a href="admin.php"><?= he('faucet.admin_link') ?></a>
   </footer>
 </main>
 
-<?php if ($faucetAddr !== ''): ?>
+<?php if ($faucetAddr !== ''):
+  // Server-rendered donation block. No live URI builder anymore; the user
+  // copies the static URI or types the amount into their wallet directly.
+?>
 <section class="card donate-section">
   <h2><?= he('donate.title') ?></h2>
   <p class="lead"><?= he('donate.lead') ?></p>
 
-  <div class="donate-inputs">
-    <div>
-      <label for="donate-amount"><?= he('donate.amount_label') ?></label>
-      <input id="donate-amount" type="number" min="0.00000001" step="any"
-             value="1" placeholder="1.00000000">
-    </div>
-    <div>
-      <label for="donor-name"><?= he('donate.name_label') ?></label>
-      <input id="donor-name" type="text" maxlength="40"
-             placeholder="<?= he('donate.name_ph') ?>">
-    </div>
-  </div>
-
   <p class="donate-hint"><?= he('donate.uri_hint') ?></p>
 
   <div class="uri-box">
-    <span class="uri-box-content" id="pay-uri">elek:<?= h($faucetAddr) ?>?amount=1.00000000&amp;label=Faucet%20Donation</span>
-    <button type="button" class="btn-copy" id="btn-copy-uri"><?= he('donate.copy_uri') ?></button>
+    <span class="uri-box-content">elek:<?= h($faucetAddr) ?>?label=Faucet%20Donation</span>
   </div>
 
   <div class="pay-info">
@@ -115,12 +127,8 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
       <span class="pi-value mono"><?= h($faucetAddr) ?></span>
     </div>
     <div class="pi-row">
-      <span class="pi-label"><?= he('donate.pi_amount') ?></span>
-      <span class="pi-value" id="pi-amount">1.00000000 ELEK</span>
-    </div>
-    <div class="pi-row">
       <span class="pi-label"><?= he('donate.pi_memo') ?></span>
-      <span class="pi-value" id="pi-memo">Faucet Donation</span>
+      <span class="pi-value">Faucet Donation</span>
     </div>
   </div>
 
@@ -129,95 +137,5 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 <?php endif; ?>
 
 </div>
-
-<script>
-const explorer   = <?= json_encode($explorer,   JSON_THROW_ON_ERROR) ?>;
-const faucetAddr = <?= json_encode($faucetAddr, JSON_THROW_ON_ERROR) ?>;
-const I18N = {
-  solve_captcha: <?= json_encode(__('faucet.solve_captcha'), JSON_THROW_ON_ERROR) ?>,
-  success:       <?= json_encode(__('faucet.success'),       JSON_THROW_ON_ERROR) ?>,
-  network_error: <?= json_encode(__('faucet.network_error'), JSON_THROW_ON_ERROR) ?>,
-};
-
-function setLoading(btn, on) {
-  btn.disabled = on;
-  btn.dataset.orig = btn.dataset.orig || btn.textContent;
-  btn.textContent  = on ? '…' : btn.dataset.orig;
-}
-function showResult(el, ok, html, isHtml) {
-  el.hidden    = false;
-  el.className = 'result ' + (ok ? 'ok' : 'err');
-  if (isHtml) el.innerHTML = html; else el.textContent = html;
-}
-
-document.getElementById('claim-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = document.getElementById('claim-btn');
-  const out = document.getElementById('result');
-  setLoading(btn, true);
-  out.hidden = true;
-  const fd = new FormData(e.target);
-  if (window.hcaptcha) {
-    const tok = hcaptcha.getResponse();
-    if (!tok) { setLoading(btn, false); showResult(out, false, I18N.solve_captcha); return; }
-    fd.set('h-captcha-response', tok);
-  }
-  try {
-    const res  = await fetch('api.php', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.ok) {
-      let link = data.txid;
-      if (explorer) link = '<a target="_blank" rel="noopener" href="' + explorer + data.txid + '">' + data.txid + '</a>';
-      showResult(out, true, I18N.success + ' ' + link, true);
-      e.target.reset();
-      if (window.hcaptcha) hcaptcha.reset();
-    } else {
-      showResult(out, false, data.error || 'Error.');
-      if (window.hcaptcha) hcaptcha.reset();
-    }
-  } catch { showResult(out, false, I18N.network_error); }
-  finally  { setLoading(btn, false); }
-});
-
-function buildPayUri() {
-  if (!faucetAddr) return '';
-  const amtRaw = parseFloat(document.getElementById('donate-amount')?.value || '1');
-  const amt    = (Number.isFinite(amtRaw) && amtRaw > 0) ? amtRaw : 1;
-  const name   = (document.getElementById('donor-name')?.value || '').trim();
-  const label  = 'Faucet Donation' + (name ? ' ' + name : '');
-  return 'elek:' + faucetAddr
-       + '?amount=' + amt.toFixed(8)
-       + '&label='  + encodeURIComponent(label);
-}
-function refreshPayment() {
-  const amtRaw = parseFloat(document.getElementById('donate-amount')?.value || '1');
-  const amt    = (Number.isFinite(amtRaw) && amtRaw > 0) ? amtRaw : 1;
-  const name   = (document.getElementById('donor-name')?.value || '').trim();
-  const memo   = 'Faucet Donation' + (name ? ' ' + name : '');
-  const ea = document.getElementById('pi-amount'); if (ea) ea.textContent = amt.toFixed(8) + ' ELEK';
-  const em = document.getElementById('pi-memo');   if (em) em.textContent = memo;
-  const eu = document.getElementById('pay-uri');   if (eu) eu.textContent = buildPayUri();
-}
-document.getElementById('donate-amount')?.addEventListener('input', refreshPayment);
-document.getElementById('donor-name')?.addEventListener('input', refreshPayment);
-refreshPayment();
-
-function copyText(text, btn) {
-  const origText = btn.textContent;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).catch(() => {});
-  } else {
-    const ta = document.createElement('textarea');
-    ta.value = text; document.body.appendChild(ta); ta.select();
-    document.execCommand('copy'); document.body.removeChild(ta);
-  }
-  btn.textContent = '✓ ' + origText;
-  btn.classList.add('copied');
-  setTimeout(() => { btn.textContent = origText; btn.classList.remove('copied'); }, 1500);
-}
-document.getElementById('btn-copy-uri')?.addEventListener('click', function() {
-  copyText(buildPayUri(), this);
-});
-</script>
 </body>
 </html>

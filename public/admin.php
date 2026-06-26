@@ -13,6 +13,7 @@ use ElektronFaucet\RateLimiter;
 use ElektronFaucet\Wallet;
 use ElektronFaucet\Logger;
 use ElektronFaucet\I18n;
+use ElektronFaucet\Flash;
 
 function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
@@ -70,7 +71,7 @@ if ($sess === null) { ?>
       <input type="hidden" name="action" value="login">
       <label><?= he('admin.username') ?><input type="text" name="username" required autofocus></label>
       <label><?= he('admin.password') ?><input type="password" name="password" required></label>
-      <button type="submit"><?= he('admin.signin') ?></button>
+      <div class="form-actions"><button type="submit"><?= he('admin.signin') ?></button></div>
     </form>
   </main>
 </div></body></html>
@@ -78,55 +79,15 @@ if ($sess === null) { ?>
 
 $adminId = (int)$sess['admin_id'];
 
-// AJAX detection is intentionally redundant: in addition to the
-// X-Requested-With header (which some reverse proxies strip) we also
-// honour `?ajax=1` on the request URL. The JS client always sets both,
-// so the server-side path is stable regardless of intermediate proxies.
-// When neither is present we fall back to the legacy redirect path so
-// the page still behaves sanely without JavaScript.
-$isAjax  = !empty($_GET['ajax'])
-        || !empty($_POST['_ajax'])
-        || (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest');
-
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'stats') {
-    header('Content-Type: application/json');
-    $wb = null; $we = null;
-    try { $wb = Wallet::fromSettings()->getBalance(); } catch (\Throwable $e) { $we = $e->getMessage(); }
-    echo json_encode([
-        'totalSat'   => Stats::totalSentSat(),
-        'totalCount' => Stats::totalSentCount(),
-        'dailySat'   => Stats::spentLastDaySat(),
-        'hourlySat'  => Stats::spentLastHourSat(),
-        'walletBal'  => $wb,
-        'walletErr'  => $we,
-    ]);
-    exit;
-}
-
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'claims') {
-    header('Content-Type: application/json');
-    echo json_encode(Stats::recentClaims(50));
-    exit;
-}
-
+// Plain POST handler. Every action sets a flash message and redirects
+// back to admin.php — no AJAX, no JSON, no background fetches. The
+// browser's native form submit drives everything.
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if (!Csrf::check((string)($_POST['csrf'] ?? ''))) {
-        if ($isAjax) { header('Content-Type: application/json'); echo json_encode(['ok'=>false,'error'=>'CSRF']); exit; }
-        http_response_code(403); exit('CSRF');
-    }
-
-    $jsonReply = function(bool $ok, string $msg = '', array $extra = []) use ($isAjax): never {
-        if ($isAjax) {
-            header('Content-Type: application/json');
-            echo json_encode(array_merge(['ok'=>$ok,'msg'=>$msg], $extra));
-        } else {
-            // No-JS fallback: redirect to a clean URL — never leak the
-            // outcome via `?_ok=…&_msg=…` query string, which used to show
-            // up in the address bar when the AJAX request was misclassified.
-            header('Location: admin.php');
-        }
+        Flash::set(false, 'CSRF');
+        header('Location: admin.php');
         exit;
-    };
+    }
 
     if ($action === 'save_settings') {
         $fields = [
@@ -143,7 +104,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (!empty($_POST['wallet_pass']))     Db::setSetting('wallet_pass_enc',     Crypto::encrypt((string)$_POST['wallet_pass'],     'wallet_pass'));
         if (!empty($_POST['hcaptcha_secret'])) Db::setSetting('hcaptcha_secret_enc', Crypto::encrypt((string)$_POST['hcaptcha_secret'], 'hcaptcha_secret'));
         Logger::audit($adminId, 'settings_saved');
-        $jsonReply(true, he('admin.saved'));
+        Flash::set(true, __('admin.saved'));
+        header('Location: admin.php');
+        exit;
     }
 
     if ($action === 'change_password') {
@@ -151,18 +114,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         if (strlen($new) >= 10) {
             Db::exec('UPDATE admin_users SET password_hash=? WHERE id=?', [password_hash($new, PASSWORD_ARGON2ID), $adminId]);
             Logger::audit($adminId, 'password_changed');
-            $jsonReply(true, he('admin.pw_changed'));
+            Flash::set(true, __('admin.pw_changed'));
+        } else {
+            Flash::set(false, __('admin.pw_short'));
         }
-        $jsonReply(false, he('admin.pw_short'));
+        header('Location: admin.php');
+        exit;
     }
 
     if ($action === 'test_rpc') {
         try {
             $info = Wallet::fromSettings()->testConnection();
-            $jsonReply(true, he('admin.test_ok') . ' ' . json_encode($info));
+            Flash::set(true, __('admin.test_ok') . ' ' . json_encode($info));
         } catch (\Throwable $e) {
-            $jsonReply(false, he('admin.test_failed') . ' ' . $e->getMessage());
+            Flash::set(false, __('admin.test_failed') . ' ' . $e->getMessage());
         }
+        header('Location: admin.php');
+        exit;
     }
 
     if ($action === 'test_unlock') {
@@ -170,41 +138,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $w = Wallet::fromSettings();
             $w->rpc()->call('walletpassphrase', [Crypto::decrypt((string)Db::getSetting('wallet_pass_enc',''), 'wallet_pass'), 1]);
             $w->rpc()->call('walletlock', []);
-            $jsonReply(true, he('admin.test_ok') . ' unlocked_and_locked_ok');
+            Flash::set(true, __('admin.test_ok') . ' unlocked_and_locked_ok');
         } catch (\Throwable $e) {
-            $jsonReply(false, he('admin.test_failed') . ' ' . $e->getMessage());
+            Flash::set(false, __('admin.test_failed') . ' ' . $e->getMessage());
         }
+        header('Location: admin.php');
+        exit;
     }
 
-    if ($action === 'drop_table') {
-        $table   = (string)($_POST['table'] ?? '');
-        $allowed = ['donations'];
-        $safe = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
-        if ($safe !== $table || !in_array($safe, $allowed, true)) {
-            $jsonReply(false, 'Not allowed.');
-        }
-        try {
-            Db::pdo()->exec("DROP TABLE IF EXISTS `{$safe}`");
-            Logger::audit($adminId, 'table_dropped', ['table' => $safe]);
-            $jsonReply(true, "Table '{$safe}' dropped.");
-        } catch (\Throwable $e) {
-            $jsonReply(false, $e->getMessage());
-        }
-    }
-
-    if ($action === 'optimize_tables') {
-        try {
-            $tables = Db::fetchAll('SHOW TABLES');
-            foreach ($tables as $row) {
-                $t = preg_replace('/[^a-zA-Z0-9_]/', '', (string)reset($row));
-                if ($t !== '') Db::pdo()->exec("OPTIMIZE TABLE `{$t}`");
-            }
-            Logger::audit($adminId, 'tables_optimized');
-            $jsonReply(true, 'All tables optimized.');
-        } catch (\Throwable $e) {
-            $jsonReply(false, $e->getMessage());
-        }
-    }
+    // Unknown action — just redirect home.
+    header('Location: admin.php');
+    exit;
 }
 
 $csrf            = Csrf::token();
@@ -223,9 +167,7 @@ $claims    = Stats::recentClaims(50);
 $histogram = Stats::last24hHistogram();
 $explorer  = $s['explorer_url'] ?? '';
 
-$activeTables = ['settings','admin_users','claims','audit_log','sessions','login_attempts'];
-$legacyTables = ['donations'];
-$dbTableInfo  = Db::getTableInfo();
+$flash = Flash::take();
 ?>
 <!doctype html>
 <html lang="<?= h($locale) ?>"><head>
@@ -253,27 +195,29 @@ $dbTableInfo  = Db::getTableInfo();
   </div>
 </header>
 
-<div id="toast" class="toast" hidden></div>
+<?php if ($flash !== null): ?>
+  <div class="result <?= $flash['ok'] ? 'ok' : 'err' ?>"><?= h($flash['msg']) ?></div>
+<?php endif; ?>
 
-<div class="stats" id="stats-section">
+<div class="stats">
   <div class="kpi">
     <div class="label"><?= he('kpi.total_given') ?></div>
-    <div class="value" id="v-total"><?= h(RateLimiter::satToElek($totalSentSat)) ?> ELEK</div>
-    <div class="sub"   id="s-total"><?= he('kpi.payouts', ['count' => $totalCount]) ?></div>
+    <div class="value"><?= h(RateLimiter::satToElek($totalSentSat)) ?> ELEK</div>
+    <div class="sub"><?= he('kpi.payouts', ['count' => $totalCount]) ?></div>
   </div>
   <div class="kpi">
     <div class="label"><?= he('kpi.today') ?></div>
-    <div class="value" id="v-daily"><?= h(RateLimiter::satToElek($dailySat)) ?> ELEK</div>
+    <div class="value"><?= h(RateLimiter::satToElek($dailySat)) ?> ELEK</div>
     <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($dailyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$dailyBudgetSat-$dailySat)))]) ?></div>
   </div>
   <div class="kpi">
     <div class="label"><?= he('kpi.this_hour') ?></div>
-    <div class="value" id="v-hourly"><?= h(RateLimiter::satToElek($hourlySat)) ?> ELEK</div>
+    <div class="value"><?= h(RateLimiter::satToElek($hourlySat)) ?> ELEK</div>
     <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($hourlyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$hourlyBudgetSat-$hourlySat)))]) ?></div>
   </div>
   <div class="kpi">
     <div class="label"><?= he('kpi.wallet_balance') ?></div>
-    <div class="value" id="v-wallet"><?= $walletBalance !== null ? h($walletBalance).' ELEK' : '&mdash;' ?></div>
+    <div class="value"><?= $walletBalance !== null ? h($walletBalance).' ELEK' : '&mdash;' ?></div>
     <div class="sub"><?= $walletError ? h($walletError) : he('kpi.via_getbalance') ?></div>
   </div>
 </div>
@@ -300,7 +244,7 @@ $dbTableInfo  = Db::getTableInfo();
         <th><?= he('tbl.address') ?></th><th><?= he('tbl.amount') ?></th>
         <th><?= he('tbl.status') ?></th><th><?= he('tbl.tx') ?></th>
       </tr></thead>
-      <tbody id="claims-body">
+      <tbody>
         <?php foreach ($claims as $c): ?>
         <tr>
           <td><?= (int)$c['id'] ?></td>
@@ -326,10 +270,9 @@ $dbTableInfo  = Db::getTableInfo();
 
 <section>
   <h2><?= he('sec.settings') ?></h2>
-  <form id="settings-form" method="post" action="admin.php?ajax=1">
+  <form method="post" action="admin.php">
     <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
     <input type="hidden" name="action" value="save_settings">
-    <input type="hidden" name="_ajax" value="1">
 
     <fieldset><legend><?= he('sec.faucet') ?></legend>
       <label><?= he('set.title') ?><input type="text" name="faucet_title" value="<?= h($s['faucet_title'] ?? 'Elektron Net Faucet') ?>"></label>
@@ -369,274 +312,31 @@ $dbTableInfo  = Db::getTableInfo();
       <label><?= he('set.captcha_secret') ?><input type="password" name="hcaptcha_secret" autocomplete="new-password"></label>
     </fieldset>
 
-    <button type="submit" id="save-btn"><?= he('set.save') ?></button>
+    <div class="form-actions"><button type="submit"><?= he('set.save') ?></button></div>
   </form>
 
-  <div class="test-rows">
-    <div class="test-row">
-      <button type="button" id="btn-test-rpc" class="btn-test" data-action="test_rpc"><?= he('set.test_rpc') ?></button>
-      <span id="rpc-msg" class="test-msg"></span>
-    </div>
-    <div class="test-row">
-      <button type="button" id="btn-test-unlock" class="btn-test" data-action="test_unlock"><?= he('set.test_unlock') ?></button>
-      <span id="unlock-msg" class="test-msg"></span>
-    </div>
-  </div>
+  <form method="post" action="admin.php" class="action-form">
+    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+    <input type="hidden" name="action" value="test_rpc">
+    <div class="form-actions"><button type="submit"><?= he('set.test_rpc') ?></button></div>
+  </form>
 
-  <div class="pw-section">
-    <label><?= he('set.new_admin_pass') ?></label>
-    <div class="pw-row">
-      <input id="new-pw" type="password" autocomplete="new-password" minlength="10">
-      <button type="button" id="btn-change-pw"><?= he('set.change_pw') ?></button>
-    </div>
-    <div id="pw-result" class="result" hidden></div>
-  </div>
-</section>
+  <form method="post" action="admin.php" class="action-form">
+    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+    <input type="hidden" name="action" value="test_unlock">
+    <div class="form-actions"><button type="submit"><?= he('set.test_unlock') ?></button></div>
+  </form>
 
-<section id="sec-db-maint">
-  <h2><?= he('admin.db_maint') ?></h2>
-  <?php if (!empty($dbTableInfo)): ?>
-  <div class="table-scroll">
-    <table>
-      <thead><tr>
-        <th><?= he('admin.db_col_table') ?></th>
-        <th><?= he('admin.db_col_rows') ?></th>
-        <th><?= he('admin.db_col_size') ?></th>
-        <th><?= he('admin.db_col_status') ?></th>
-        <th></th>
-      </tr></thead>
-      <tbody>
-      <?php foreach ($dbTableInfo as $t): ?>
-        <?php
-          $tName    = (string)$t['TABLE_NAME'];
-          $isLegacy = in_array($tName, $legacyTables, true);
-          $isActive = in_array($tName, $activeTables, true);
-          $kb       = round((int)$t['total_bytes'] / 1024, 1);
-        ?>
-        <tr id="dbrow-<?= h($tName) ?>">
-          <td class="mono"><?= h($tName) ?></td>
-          <td><?= number_format((int)$t['TABLE_ROWS']) ?></td>
-          <td><?= h($kb) ?> KB</td>
-          <td><?php
-            if ($isLegacy)     echo '<span class="status-legacy">'  . he('admin.db_status_legacy') . '</span>';
-            elseif ($isActive) echo '<span class="status-active">'  . he('admin.db_status_active') . '</span>';
-            else               echo '<span class="status-pending">' . he('admin.db_status_unknown') . '</span>';
-          ?></td>
-          <td>
-            <?php if ($isLegacy): ?>
-              <button type="button" class="btn-del btn-drop"
-                      data-table="<?= h($tName) ?>"
-                      data-csrf="<?= h($csrf) ?>"
-                      title="<?= he('admin.db_drop_title') ?>">
-                <?= he('admin.db_drop_btn') ?>
-              </button>
-            <?php endif; ?>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-  <?php endif; ?>
-  <div class="inline-actions" style="margin-top:14px">
-    <button type="button" id="btn-optimize" data-csrf="<?= h($csrf) ?>"><?= he('admin.db_optimize') ?></button>
-  </div>
-  <div id="db-result" class="result" hidden></div>
+  <form method="post" action="admin.php" class="action-form">
+    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+    <input type="hidden" name="action" value="change_password">
+    <label><?= he('set.new_admin_pass') ?>
+      <input type="password" name="new_password" autocomplete="new-password" minlength="10" required>
+    </label>
+    <div class="form-actions"><button type="submit"><?= he('set.change_pw') ?></button></div>
+  </form>
 </section>
 
 </div><!-- .page.admin -->
 
-<script>
-/*
- * Admin panel client-side glue. All POSTs go to admin.php?ajax=1 with a
- * matching X-Requested-With header AND a hidden _ajax=1 form field — that
- * triple-redundancy makes detection survive proxies that strip headers and
- * is the reason an accidentally-native submit (broken JS, slow page load)
- * still hits the JSON path instead of dumping ?_ok=1&_msg=... into the
- * URL bar.
- *
- * Bindings are wrapped in safeBind() so a single missing DOM node never
- * cascades into "no buttons work at all".
- */
-(function () {
-  'use strict';
-
-  var CSRF = <?= json_encode($csrf, JSON_THROW_ON_ERROR) ?>;
-  var AJAX_URL = 'admin.php?ajax=1';
-
-  var toastEl = document.getElementById('toast');
-
-  function showToast(msg, ok) {
-    if (!toastEl) { console[ok ? 'log' : 'error']('toast:', msg); return; }
-    toastEl.textContent = msg;
-    toastEl.className   = 'toast ' + (ok ? 'ok' : 'err');
-    toastEl.hidden      = false;
-    clearTimeout(toastEl._t);
-    toastEl._t = setTimeout(function () { toastEl.hidden = true; }, 3500);
-  }
-  function showInline(el, ok, msg) {
-    if (!el) return;
-    el.hidden      = false;
-    el.className   = 'result ' + (ok ? 'ok' : 'err');
-    el.textContent = msg;
-  }
-  function setLoading(btn, on) {
-    if (!btn) return;
-    btn.disabled = on;
-    if (on) {
-      btn.dataset.orig = btn.dataset.orig || btn.textContent;
-      btn.textContent  = '…';
-    } else if (btn.dataset.orig) {
-      btn.textContent  = btn.dataset.orig;
-    }
-  }
-  function safeBind(selectorOrEl, event, handler) {
-    var el = typeof selectorOrEl === 'string'
-      ? document.getElementById(selectorOrEl)
-      : selectorOrEl;
-    if (!el) return;
-    el.addEventListener(event, handler);
-  }
-  function toFormData(data) {
-    if (data instanceof FormData) return data;
-    var f = new FormData();
-    Object.keys(data || {}).forEach(function (k) { f.set(k, data[k]); });
-    return f;
-  }
-
-  // Parses any response the admin.php POST handler might return, even
-  // when the body is HTML (session expired, php fatal, nginx 5xx). Always
-  // resolves to {ok, msg, ...} — never throws.
-  async function readResponse(res) {
-    var ct = res.headers.get('content-type') || '';
-    if (ct.indexOf('application/json') !== -1) {
-      try { return await res.json(); }
-      catch (e) { return { ok: false, msg: 'Bad JSON: ' + e.message }; }
-    }
-    var body = '';
-    try { body = await res.text(); } catch (_) { /* ignore */ }
-    if (/name="username"|name=\"password\"|action=login/i.test(body)) {
-      return { ok: false, msg: 'Admin session expired. Reload the page and log in again.' };
-    }
-    return { ok: false, msg: 'HTTP ' + res.status + ' (non-JSON): ' + body.slice(0, 200) };
-  }
-
-  async function ajaxPost(data, btn) {
-    setLoading(btn, true);
-    try {
-      var fd = toFormData(data);
-      fd.set('_ajax', '1');
-      var res = await fetch(AJAX_URL, {
-        method:      'POST',
-        body:        fd,
-        credentials: 'same-origin',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'Accept':           'application/json',
-        },
-      });
-      return await readResponse(res);
-    } catch (e) {
-      var msg = (e && e.message) ? e.message : String(e);
-      showToast('Request failed: ' + msg, false);
-      return { ok: false, msg: msg };
-    } finally {
-      setLoading(btn, false);
-    }
-  }
-
-  // ── Settings form ─────────────────────────────────────────────
-  var settingsForm = document.getElementById('settings-form');
-  safeBind(settingsForm, 'submit', async function (e) {
-    e.preventDefault();
-    var btn = document.getElementById('save-btn');
-    var d   = await ajaxPost(new FormData(e.target), btn);
-    showToast(d.msg || (d.ok ? 'Saved' : 'Error'), d.ok);
-  });
-
-  // ── RPC / Unlock tests ────────────────────────────────────────
-  var testButtons = document.querySelectorAll('.btn-test');
-  function setBtnState(btn, state) {
-    if (!btn) return;
-    btn.classList.remove('state-testing','state-ok','state-err');
-    if (state) btn.classList.add('state-' + state);
-  }
-  function setMsgState(el, state, text) {
-    if (!el) return;
-    el.classList.remove('state-testing','state-ok','state-err');
-    if (state) el.classList.add('state-' + state);
-    el.textContent = text || '';
-  }
-  async function runTest(btn) {
-    var msgId = btn.id === 'btn-test-rpc' ? 'rpc-msg' : 'unlock-msg';
-    var msgEl = document.getElementById(msgId);
-    testButtons.forEach(function (b) { b.disabled = true; });
-    setBtnState(btn, 'testing');
-    setMsgState(msgEl, 'testing', 'Testing…');
-    testButtons.forEach(function (b) { if (b !== btn) setBtnState(b, null); });
-    var data = await ajaxPost({ action: btn.dataset.action, csrf: CSRF }, null);
-    var state = data.ok ? 'ok' : 'err';
-    setBtnState(btn, state);
-    setMsgState(msgEl, state, data.msg || (data.ok ? 'OK' : 'Error'));
-    testButtons.forEach(function (b) { b.disabled = false; });
-  }
-  testButtons.forEach(function (b) {
-    b.addEventListener('click', function () { runTest(b); });
-  });
-
-  // ── Change admin password ─────────────────────────────────────
-  safeBind('btn-change-pw', 'click', async function () {
-    var pwInput = document.getElementById('new-pw');
-    var pw = pwInput ? pwInput.value : '';
-    var d  = await ajaxPost({ action: 'change_password', new_password: pw, csrf: CSRF }, this);
-    showInline(document.getElementById('pw-result'), d.ok, d.msg || (d.ok ? 'OK' : 'Error'));
-    if (d.ok && pwInput) pwInput.value = '';
-  });
-
-  // ── Stats poller ──────────────────────────────────────────────
-  function satToElek(s) { return (s / 1e8).toFixed(8).replace(/\.?0+$/, '') || '0'; }
-  function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
-  function refreshStats() {
-    fetch('admin.php?ajax=stats', {
-      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-      credentials: 'same-origin',
-    }).then(function (r) { return r.json(); }).then(function (d) {
-      setText('v-total',  satToElek(d.totalSat)  + ' ELEK');
-      setText('s-total',  d.totalCount + ' payouts');
-      setText('v-daily',  satToElek(d.dailySat)  + ' ELEK');
-      setText('v-hourly', satToElek(d.hourlySat) + ' ELEK');
-      if (d.walletBal !== null) setText('v-wallet', d.walletBal + ' ELEK');
-    }).catch(function () { /* silent */ });
-  }
-  setInterval(refreshStats, 60000);
-
-  // ── DB maintenance ────────────────────────────────────────────
-  document.querySelectorAll('.btn-drop').forEach(function (btn) {
-    btn.addEventListener('click', async function () {
-      var table = this.dataset.table;
-      if (!confirm('Drop table "' + table + '"? This cannot be undone.')) return;
-      var d = await ajaxPost({ action: 'drop_table', table: table, csrf: this.dataset.csrf }, this);
-      showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok ? 'Done' : 'Error'));
-      if (d.ok) {
-        var row = document.getElementById('dbrow-' + table);
-        if (row) row.remove();
-      }
-    });
-  });
-
-  safeBind('btn-optimize', 'click', async function () {
-    var d = await ajaxPost({ action: 'optimize_tables', csrf: this.dataset.csrf }, this);
-    showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok ? 'Done' : 'Error'));
-  });
-
-  // ── Global async-error surface ────────────────────────────────
-  window.addEventListener('unhandledrejection', function (e) {
-    var msg = (e && e.reason && (e.reason.message || String(e.reason))) || 'Unknown error';
-    showToast('Background error: ' + msg, false);
-  });
-  window.addEventListener('error', function (e) {
-    console.error('admin error:', e.error || e.message);
-  });
-})();
-</script>
 </body></html>
