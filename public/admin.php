@@ -77,7 +77,16 @@ if ($sess === null) { ?>
 <?php exit; }
 
 $adminId = (int)$sess['admin_id'];
-$isAjax  = (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest');
+
+// AJAX detection is intentionally redundant: in addition to the
+// X-Requested-With header (which some reverse proxies strip) we also
+// honour `?ajax=1` on the request URL. The JS client always sets both,
+// so the server-side path is stable regardless of intermediate proxies.
+// When neither is present we fall back to the legacy redirect path so
+// the page still behaves sanely without JavaScript.
+$isAjax  = !empty($_GET['ajax'])
+        || !empty($_POST['_ajax'])
+        || (($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'XMLHttpRequest');
 
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'stats') {
     header('Content-Type: application/json');
@@ -111,7 +120,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             header('Content-Type: application/json');
             echo json_encode(array_merge(['ok'=>$ok,'msg'=>$msg], $extra));
         } else {
-            header('Location: admin.php?_ok=' . ($ok?'1':'0') . '&_msg=' . urlencode($msg));
+            // No-JS fallback: redirect to a clean URL — never leak the
+            // outcome via `?_ok=…&_msg=…` query string, which used to show
+            // up in the address bar when the AJAX request was misclassified.
+            header('Location: admin.php');
         }
         exit;
     };
@@ -314,9 +326,10 @@ $dbTableInfo  = Db::getTableInfo();
 
 <section>
   <h2><?= he('sec.settings') ?></h2>
-  <form id="settings-form" method="post">
+  <form id="settings-form" method="post" action="admin.php?ajax=1">
     <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
     <input type="hidden" name="action" value="save_settings">
+    <input type="hidden" name="_ajax" value="1">
 
     <fieldset><legend><?= he('sec.faucet') ?></legend>
       <label><?= he('set.title') ?><input type="text" name="faucet_title" value="<?= h($s['faucet_title'] ?? 'Elektron Net Faucet') ?>"></label>
@@ -361,11 +374,11 @@ $dbTableInfo  = Db::getTableInfo();
 
   <div class="test-rows">
     <div class="test-row">
-      <button id="btn-test-rpc" class="btn-test" data-action="test_rpc"><?= he('set.test_rpc') ?></button>
+      <button type="button" id="btn-test-rpc" class="btn-test" data-action="test_rpc"><?= he('set.test_rpc') ?></button>
       <span id="rpc-msg" class="test-msg"></span>
     </div>
     <div class="test-row">
-      <button id="btn-test-unlock" class="btn-test" data-action="test_unlock"><?= he('set.test_unlock') ?></button>
+      <button type="button" id="btn-test-unlock" class="btn-test" data-action="test_unlock"><?= he('set.test_unlock') ?></button>
       <span id="unlock-msg" class="test-msg"></span>
     </div>
   </div>
@@ -374,7 +387,7 @@ $dbTableInfo  = Db::getTableInfo();
     <label><?= he('set.new_admin_pass') ?></label>
     <div class="pw-row">
       <input id="new-pw" type="password" autocomplete="new-password" minlength="10">
-      <button id="btn-change-pw"><?= he('set.change_pw') ?></button>
+      <button type="button" id="btn-change-pw"><?= he('set.change_pw') ?></button>
     </div>
     <div id="pw-result" class="result" hidden></div>
   </div>
@@ -411,7 +424,7 @@ $dbTableInfo  = Db::getTableInfo();
           ?></td>
           <td>
             <?php if ($isLegacy): ?>
-              <button class="btn-del btn-drop"
+              <button type="button" class="btn-del btn-drop"
                       data-table="<?= h($tName) ?>"
                       data-csrf="<?= h($csrf) ?>"
                       title="<?= he('admin.db_drop_title') ?>">
@@ -426,7 +439,7 @@ $dbTableInfo  = Db::getTableInfo();
   </div>
   <?php endif; ?>
   <div class="inline-actions" style="margin-top:14px">
-    <button id="btn-optimize" data-csrf="<?= h($csrf) ?>"><?= he('admin.db_optimize') ?></button>
+    <button type="button" id="btn-optimize" data-csrf="<?= h($csrf) ?>"><?= he('admin.db_optimize') ?></button>
   </div>
   <div id="db-result" class="result" hidden></div>
 </section>
@@ -434,166 +447,196 @@ $dbTableInfo  = Db::getTableInfo();
 </div><!-- .page.admin -->
 
 <script>
-const CSRF = <?= json_encode($csrf, JSON_THROW_ON_ERROR) ?>;
+/*
+ * Admin panel client-side glue. All POSTs go to admin.php?ajax=1 with a
+ * matching X-Requested-With header AND a hidden _ajax=1 form field — that
+ * triple-redundancy makes detection survive proxies that strip headers and
+ * is the reason an accidentally-native submit (broken JS, slow page load)
+ * still hits the JSON path instead of dumping ?_ok=1&_msg=... into the
+ * URL bar.
+ *
+ * Bindings are wrapped in safeBind() so a single missing DOM node never
+ * cascades into "no buttons work at all".
+ */
+(function () {
+  'use strict';
 
-function setLoading(btn, on) {
-  btn.disabled = on;
-  btn.dataset.orig = btn.dataset.orig || btn.textContent;
-  btn.textContent  = on ? '…' : btn.dataset.orig;
-}
-const toastEl = document.getElementById('toast');
-function showToast(msg, ok) {
-  toastEl.textContent = msg;
-  toastEl.className   = 'toast ' + (ok ? 'ok' : 'err');
-  toastEl.hidden      = false;
-  clearTimeout(toastEl._t);
-  toastEl._t = setTimeout(() => { toastEl.hidden = true; }, 3500);
-}
-function showInline(el, ok, msg) {
-  el.hidden    = false;
-  el.className = 'result ' + (ok ? 'ok' : 'err');
-  el.textContent = msg;
-}
-async function ajaxPost(data, btn) {
-  if (btn) setLoading(btn, true);
-  try {
-    const fd = data instanceof FormData ? data
-      : (() => { const f = new FormData(); Object.entries(data).forEach(([k,v]) => f.set(k,v)); return f; })();
-    const res = await fetch('admin.php', {
-      method: 'POST',
-      body: fd,
-      credentials: 'same-origin',
-      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-    });
-    const ct = res.headers.get('content-type') || '';
-    if (!ct.includes('application/json')) {
-      const body = await res.text();
-      if (/name="username"|name=\"password\"|action=login/i.test(body)) {
-        showToast('Admin session expired. Reload the page and log in again.', false);
-        return { ok: false, msg: 'Session expired' };
-      }
-      throw new Error('HTTP ' + res.status + ' (non-JSON): ' + body.slice(0, 200));
+  var CSRF = <?= json_encode($csrf, JSON_THROW_ON_ERROR) ?>;
+  var AJAX_URL = 'admin.php?ajax=1';
+
+  var toastEl = document.getElementById('toast');
+
+  function showToast(msg, ok) {
+    if (!toastEl) { console[ok ? 'log' : 'error']('toast:', msg); return; }
+    toastEl.textContent = msg;
+    toastEl.className   = 'toast ' + (ok ? 'ok' : 'err');
+    toastEl.hidden      = false;
+    clearTimeout(toastEl._t);
+    toastEl._t = setTimeout(function () { toastEl.hidden = true; }, 3500);
+  }
+  function showInline(el, ok, msg) {
+    if (!el) return;
+    el.hidden      = false;
+    el.className   = 'result ' + (ok ? 'ok' : 'err');
+    el.textContent = msg;
+  }
+  function setLoading(btn, on) {
+    if (!btn) return;
+    btn.disabled = on;
+    if (on) {
+      btn.dataset.orig = btn.dataset.orig || btn.textContent;
+      btn.textContent  = '…';
+    } else if (btn.dataset.orig) {
+      btn.textContent  = btn.dataset.orig;
     }
-    return await res.json();
-  } catch (e) {
-    showToast('Request failed: ' + (e && e.message ? e.message : e), false);
-    return { ok: false, msg: (e && e.message) ? e.message : String(e) };
-  } finally { if (btn) setLoading(btn, false); }
-}
+  }
+  function safeBind(selectorOrEl, event, handler) {
+    var el = typeof selectorOrEl === 'string'
+      ? document.getElementById(selectorOrEl)
+      : selectorOrEl;
+    if (!el) return;
+    el.addEventListener(event, handler);
+  }
+  function toFormData(data) {
+    if (data instanceof FormData) return data;
+    var f = new FormData();
+    Object.keys(data || {}).forEach(function (k) { f.set(k, data[k]); });
+    return f;
+  }
 
-document.getElementById('settings-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = document.getElementById('save-btn');
-  const d   = await ajaxPost(new FormData(e.target), btn);
-  showToast(d.msg || (d.ok ? 'Saved' : 'Error'), d.ok);
-});
-
-// ── RPC / Unlock tests ──
-const testButtons = document.querySelectorAll('.btn-test');
-function setBtnState(btn, state) {
-  btn.classList.remove('state-testing','state-ok','state-err');
-  if (state) btn.classList.add('state-' + state);
-}
-function setMsgState(el, state, text) {
-  el.classList.remove('state-testing','state-ok','state-err');
-  if (state) el.classList.add('state-' + state);
-  el.textContent = text || '';
-}
-async function runTest(btn) {
-  const msgEl = document.getElementById(btn.id === 'btn-test-rpc' ? 'rpc-msg' : 'unlock-msg');
-  // disable BOTH test buttons
-  testButtons.forEach(b => { b.disabled = true; });
-  setBtnState(btn, 'testing');
-  setMsgState(msgEl, 'testing', 'Testing…');
-  // reset the OTHER button's state visuals
-  testButtons.forEach(b => { if (b !== btn) setBtnState(b, null); });
-  try {
-    const fd = new FormData();
-    fd.set('action', btn.dataset.action);
-    fd.set('csrf', CSRF);
-    const res = await fetch('admin.php', {
-      method: 'POST',
-      body: fd,
-      credentials: 'same-origin',
-      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
-    });
-    const ct = res.headers.get('content-type') || '';
-    let data;
-    if (!ct.includes('application/json')) {
-      const body = await res.text();
-      if (/name="username"|name=\"password\"|action=login/i.test(body)) {
-        data = { ok: false, msg: 'Admin session expired. Reload the page and log in again.' };
-      } else {
-        data = { ok: false, msg: 'HTTP ' + res.status + ' (non-JSON): ' + body.slice(0, 200) };
-      }
-    } else {
-      data = await res.json();
+  // Parses any response the admin.php POST handler might return, even
+  // when the body is HTML (session expired, php fatal, nginx 5xx). Always
+  // resolves to {ok, msg, ...} — never throws.
+  async function readResponse(res) {
+    var ct = res.headers.get('content-type') || '';
+    if (ct.indexOf('application/json') !== -1) {
+      try { return await res.json(); }
+      catch (e) { return { ok: false, msg: 'Bad JSON: ' + e.message }; }
     }
-    const state = data.ok ? 'ok' : 'err';
+    var body = '';
+    try { body = await res.text(); } catch (_) { /* ignore */ }
+    if (/name="username"|name=\"password\"|action=login/i.test(body)) {
+      return { ok: false, msg: 'Admin session expired. Reload the page and log in again.' };
+    }
+    return { ok: false, msg: 'HTTP ' + res.status + ' (non-JSON): ' + body.slice(0, 200) };
+  }
+
+  async function ajaxPost(data, btn) {
+    setLoading(btn, true);
+    try {
+      var fd = toFormData(data);
+      fd.set('_ajax', '1');
+      var res = await fetch(AJAX_URL, {
+        method:      'POST',
+        body:        fd,
+        credentials: 'same-origin',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept':           'application/json',
+        },
+      });
+      return await readResponse(res);
+    } catch (e) {
+      var msg = (e && e.message) ? e.message : String(e);
+      showToast('Request failed: ' + msg, false);
+      return { ok: false, msg: msg };
+    } finally {
+      setLoading(btn, false);
+    }
+  }
+
+  // ── Settings form ─────────────────────────────────────────────
+  var settingsForm = document.getElementById('settings-form');
+  safeBind(settingsForm, 'submit', async function (e) {
+    e.preventDefault();
+    var btn = document.getElementById('save-btn');
+    var d   = await ajaxPost(new FormData(e.target), btn);
+    showToast(d.msg || (d.ok ? 'Saved' : 'Error'), d.ok);
+  });
+
+  // ── RPC / Unlock tests ────────────────────────────────────────
+  var testButtons = document.querySelectorAll('.btn-test');
+  function setBtnState(btn, state) {
+    if (!btn) return;
+    btn.classList.remove('state-testing','state-ok','state-err');
+    if (state) btn.classList.add('state-' + state);
+  }
+  function setMsgState(el, state, text) {
+    if (!el) return;
+    el.classList.remove('state-testing','state-ok','state-err');
+    if (state) el.classList.add('state-' + state);
+    el.textContent = text || '';
+  }
+  async function runTest(btn) {
+    var msgId = btn.id === 'btn-test-rpc' ? 'rpc-msg' : 'unlock-msg';
+    var msgEl = document.getElementById(msgId);
+    testButtons.forEach(function (b) { b.disabled = true; });
+    setBtnState(btn, 'testing');
+    setMsgState(msgEl, 'testing', 'Testing…');
+    testButtons.forEach(function (b) { if (b !== btn) setBtnState(b, null); });
+    var data = await ajaxPost({ action: btn.dataset.action, csrf: CSRF }, null);
+    var state = data.ok ? 'ok' : 'err';
     setBtnState(btn, state);
     setMsgState(msgEl, state, data.msg || (data.ok ? 'OK' : 'Error'));
-  } catch (e) {
-    setBtnState(btn, 'err');
-    setMsgState(msgEl, 'err', 'Network error: ' + e.message);
-  } finally {
-    testButtons.forEach(b => { b.disabled = false; });
+    testButtons.forEach(function (b) { b.disabled = false; });
   }
-}
-testButtons.forEach(b => b.addEventListener('click', () => runTest(b)));
-
-document.getElementById('btn-change-pw').addEventListener('click', async function() {
-  const pw = document.getElementById('new-pw').value;
-  const d  = await ajaxPost({ action:'change_password', new_password:pw, csrf:CSRF }, this);
-  showInline(document.getElementById('pw-result'), d.ok, d.msg || (d.ok?'OK':'Error'));
-  if (d.ok) document.getElementById('new-pw').value = '';
-});
-
-function satToElek(s) { return (s/1e8).toFixed(8).replace(/\.?0+$/,'') || '0'; }
-function refreshStats() {
-  fetch('admin.php?ajax=stats', {headers:{'X-Requested-With':'XMLHttpRequest'}})
-    .then(r => r.json()).then(d => {
-      document.getElementById('v-total').textContent  = satToElek(d.totalSat)  + ' ELEK';
-      document.getElementById('s-total').textContent  = d.totalCount + ' payouts';
-      document.getElementById('v-daily').textContent  = satToElek(d.dailySat)  + ' ELEK';
-      document.getElementById('v-hourly').textContent = satToElek(d.hourlySat) + ' ELEK';
-      if (d.walletBal !== null) document.getElementById('v-wallet').textContent = d.walletBal + ' ELEK';
-    }).catch(()=>{});
-}
-setInterval(refreshStats, 60000);
-
-document.querySelectorAll('.btn-drop').forEach(btn => {
-  btn.addEventListener('click', async function() {
-    const table = this.dataset.table;
-    if (!confirm('Drop table "' + table + '"? This cannot be undone.')) return;
-    const d = await ajaxPost({ action:'drop_table', table, csrf:this.dataset.csrf }, this);
-    showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok?'Done':'Error'));
-    if (d.ok) document.getElementById('dbrow-' + table)?.remove();
+  testButtons.forEach(function (b) {
+    b.addEventListener('click', function () { runTest(b); });
   });
-});
 
-document.getElementById('btn-optimize').addEventListener('click', async function() {
-  const d = await ajaxPost({ action:'optimize_tables', csrf:this.dataset.csrf }, this);
-  showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok?'Done':'Error'));
-});
-</script>
+  // ── Change admin password ─────────────────────────────────────
+  safeBind('btn-change-pw', 'click', async function () {
+    var pwInput = document.getElementById('new-pw');
+    var pw = pwInput ? pwInput.value : '';
+    var d  = await ajaxPost({ action: 'change_password', new_password: pw, csrf: CSRF }, this);
+    showInline(document.getElementById('pw-result'), d.ok, d.msg || (d.ok ? 'OK' : 'Error'));
+    if (d.ok && pwInput) pwInput.value = '';
+  });
 
-<script>
-/* startos-patched-ajax-handlers */
-window.addEventListener("unhandledrejection", function(e) {
-  var msg = (e && e.reason && (e.reason.message || String(e.reason))) || "Unknown error";
-  var toast = document.getElementById("toast");
-  if (toast) {
-    toast.textContent = "Background error: " + msg;
-    toast.className = "toast err";
-    toast.hidden = false;
-    clearTimeout(toast._t);
-    toast._t = setTimeout(function() { toast.hidden = true; }, 6000);
-  } else {
-    console.error("admin unhandledrejection:", msg);
+  // ── Stats poller ──────────────────────────────────────────────
+  function satToElek(s) { return (s / 1e8).toFixed(8).replace(/\.?0+$/, '') || '0'; }
+  function setText(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+  function refreshStats() {
+    fetch('admin.php?ajax=stats', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      setText('v-total',  satToElek(d.totalSat)  + ' ELEK');
+      setText('s-total',  d.totalCount + ' payouts');
+      setText('v-daily',  satToElek(d.dailySat)  + ' ELEK');
+      setText('v-hourly', satToElek(d.hourlySat) + ' ELEK');
+      if (d.walletBal !== null) setText('v-wallet', d.walletBal + ' ELEK');
+    }).catch(function () { /* silent */ });
   }
-});
-window.addEventListener("error", function(e) {
-  console.error("admin error:", e.error || e.message);
-});
+  setInterval(refreshStats, 60000);
+
+  // ── DB maintenance ────────────────────────────────────────────
+  document.querySelectorAll('.btn-drop').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+      var table = this.dataset.table;
+      if (!confirm('Drop table "' + table + '"? This cannot be undone.')) return;
+      var d = await ajaxPost({ action: 'drop_table', table: table, csrf: this.dataset.csrf }, this);
+      showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok ? 'Done' : 'Error'));
+      if (d.ok) {
+        var row = document.getElementById('dbrow-' + table);
+        if (row) row.remove();
+      }
+    });
+  });
+
+  safeBind('btn-optimize', 'click', async function () {
+    var d = await ajaxPost({ action: 'optimize_tables', csrf: this.dataset.csrf }, this);
+    showInline(document.getElementById('db-result'), d.ok, d.msg || (d.ok ? 'Done' : 'Error'));
+  });
+
+  // ── Global async-error surface ────────────────────────────────
+  window.addEventListener('unhandledrejection', function (e) {
+    var msg = (e && e.reason && (e.reason.message || String(e.reason))) || 'Unknown error';
+    showToast('Background error: ' + msg, false);
+  });
+  window.addEventListener('error', function (e) {
+    console.error('admin error:', e.error || e.message);
+  });
+})();
 </script>
 </body></html>
