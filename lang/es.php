@@ -134,4 +134,6 @@ return [
     'inst.err.admin_required'=> 'Usuario + contraseña (≥10 chars) requeridos.',
     'inst.err.cfg_write'     => 'No se pudo escribir config.php.',
     'inst.err.schema'        => 'schema.sql no legible',
+
+    'footer.presented_by'    => 'Presentado por',
 ];
