@@ -36,12 +36,23 @@ a:hover { text-decoration: underline; }
     justify-content: center;
     margin-top: 16px;
 }
+.form-actions.right { justify-content: flex-end; }
 .form-actions button { margin-top: 0; }
 
 /* Each test / action form is a tiny standalone block; give it air. */
 .action-form { margin-top: 14px; }
 
+/* hCaptcha widget centered. The vendor div sets its own width based on
+ * the chosen size, so just center the flex container around it. */
+.h-captcha-row {
+    display: flex;
+    justify-content: center;
+    margin: 12px 0;
+}
+.h-captcha-row .h-captcha { margin: 0; }
+
 .page-header {
+    position: relative;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -53,6 +64,19 @@ a:hover { text-decoration: underline; }
     align-items: center;
     gap: 12px;
 }
+.header-admin-link {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: rgba(255,255,255,.06);
+}
+.header-admin-link:hover { color: var(--fg); text-decoration: none; }
 .site-logo { display: inline-block; line-height: 0; text-decoration: none; }
 .site-logo:hover { text-decoration: none; }
 .site-logo img { width: 64px; height: 64px; display: block; transition: transform .15s ease; }
@@ -132,6 +156,15 @@ button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 .result.ok  { background: rgba(46,216,130,.1);  color: var(--ok);  border: 1px solid rgba(46,216,130,.25); }
 .result.err { background: rgba(240,96,96,.1);   color: var(--err); border: 1px solid rgba(240,96,96,.25); }
 footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--muted); }
+.site-footer {
+    margin-top: 28px;
+    text-align: center;
+    font-size: .78rem;
+    color: var(--muted);
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+}
+.site-footer a { color: var(--accent); }
 .muted { color: var(--muted); }
 .mono  { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .82rem; }
 
@@ -146,14 +179,25 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
     border: 1px solid var(--accent);
     border-radius: 10px;
     padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 12px;
     margin-bottom: 12px; overflow: hidden;
 }
 .uri-box-content {
-    display: block; min-width: 0;
+    flex: 1; min-width: 0;
     font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     font-size: .82rem; color: #d4e8ff; line-height: 1.65;
     word-break: break-all; overflow-wrap: break-word; white-space: pre-wrap;
 }
+.btn-copy {
+    margin: 0; padding: 7px 14px;
+    font-size: .82rem; font-weight: 600;
+    background: var(--accent); color: #05111c;
+    border: 0; border-radius: 6px;
+    cursor: pointer; flex-shrink: 0; white-space: nowrap;
+    align-self: flex-start;
+}
+.btn-copy:hover  { background: #7ac6f8; }
+.btn-copy.copied { background: var(--ok); }
 
 .pay-info {
     background: #0d1218;

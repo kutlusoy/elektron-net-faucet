@@ -74,6 +74,10 @@ if ($sess === null) { ?>
       <div class="form-actions"><button type="submit"><?= he('admin.signin') ?></button></div>
     </form>
   </main>
+  <footer class="site-footer">
+    <?= he('footer.presented_by') ?>
+    <a href="https://elektron-net.org" target="_blank" rel="noopener">https://elektron-net.org</a>
+  </footer>
 </div></body></html>
 <?php exit; }
 
@@ -336,6 +340,11 @@ $flash = Flash::take();
     <div class="form-actions"><button type="submit"><?= he('set.change_pw') ?></button></div>
   </form>
 </section>
+
+<footer class="site-footer">
+  <?= he('footer.presented_by') ?>
+  <a href="https://elektron-net.org" target="_blank" rel="noopener">https://elektron-net.org</a>
+</footer>
 
 </div><!-- .page.admin -->
 

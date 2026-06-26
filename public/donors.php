@@ -58,6 +58,7 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
 <div class="page wide">
 
 <header class="page-header">
+  <a href="admin.php" class="header-admin-link"><?= he('faucet.admin_link') ?></a>
   <a href="index.php" class="site-logo" aria-label="<?= h($title) ?>">
     <img src="assets/logo.svg" alt="" width="64" height="64">
   </a>
@@ -134,6 +135,11 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
     <a href="index.php"><?= he('donors.back') ?></a>
   </footer>
 </main>
+
+<footer class="site-footer">
+  <?= he('footer.presented_by') ?>
+  <a href="https://elektron-net.org" target="_blank" rel="noopener">https://elektron-net.org</a>
+</footer>
 
 </div>
 </body>

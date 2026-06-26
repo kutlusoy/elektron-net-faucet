@@ -57,6 +57,7 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 <div class="page">
 
 <header class="page-header">
+  <a href="admin.php" class="header-admin-link"><?= he('faucet.admin_link') ?></a>
   <a href="index.php" class="site-logo" aria-label="<?= h($title) ?>">
     <img src="assets/logo.svg" alt="" width="64" height="64">
   </a>
@@ -95,30 +96,39 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
            placeholder="be1q&hellip;" maxlength="90" spellcheck="false">
 
     <?php if ($captchaOn): ?>
-      <div class="h-captcha" data-sitekey="<?= h($captchaSite) ?>"></div>
+      <div class="h-captcha-row">
+        <div class="h-captcha" data-sitekey="<?= h($captchaSite) ?>"></div>
+      </div>
     <?php endif; ?>
 
     <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
-    <div class="form-actions"><button type="submit"><?= he('faucet.submit') ?></button></div>
+    <div class="form-actions right"><button type="submit"><?= he('faucet.submit') ?></button></div>
   </form>
-
-  <footer>
-    <a href="admin.php"><?= he('faucet.admin_link') ?></a>
-  </footer>
 </main>
 
-<?php if ($faucetAddr !== ''):
-  // Server-rendered donation block. No live URI builder anymore; the user
-  // copies the static URI or types the amount into their wallet directly.
-?>
+<?php if ($faucetAddr !== ''): ?>
 <section class="card donate-section">
   <h2><?= he('donate.title') ?></h2>
   <p class="lead"><?= he('donate.lead') ?></p>
 
+  <div class="donate-inputs">
+    <div>
+      <label for="donate-amount"><?= he('donate.amount_label') ?></label>
+      <input id="donate-amount" type="number" min="0.00000001" step="any"
+             value="1" placeholder="1.00000000">
+    </div>
+    <div>
+      <label for="donor-name"><?= he('donate.name_label') ?></label>
+      <input id="donor-name" type="text" maxlength="40"
+             placeholder="<?= he('donate.name_ph') ?>">
+    </div>
+  </div>
+
   <p class="donate-hint"><?= he('donate.uri_hint') ?></p>
 
   <div class="uri-box">
-    <span class="uri-box-content">elek:<?= h($faucetAddr) ?>?label=Faucet%20Donation</span>
+    <span class="uri-box-content" id="pay-uri">elek:<?= h($faucetAddr) ?>?amount=1.00000000&amp;label=Faucet%20Donation</span>
+    <button type="button" class="btn-copy" id="btn-copy-uri"><?= he('donate.copy_uri') ?></button>
   </div>
 
   <div class="pay-info">
@@ -127,8 +137,12 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
       <span class="pi-value mono"><?= h($faucetAddr) ?></span>
     </div>
     <div class="pi-row">
+      <span class="pi-label"><?= he('donate.pi_amount') ?></span>
+      <span class="pi-value" id="pi-amount">1.00000000 ELEK</span>
+    </div>
+    <div class="pi-row">
       <span class="pi-label"><?= he('donate.pi_memo') ?></span>
-      <span class="pi-value">Faucet Donation</span>
+      <span class="pi-value" id="pi-memo">Faucet Donation</span>
     </div>
   </div>
 
@@ -136,6 +150,60 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 </section>
 <?php endif; ?>
 
+<footer class="site-footer">
+  <?= he('footer.presented_by') ?>
+  <a href="https://elektron-net.org" target="_blank" rel="noopener">https://elektron-net.org</a>
+</footer>
+
 </div>
+
+<?php if ($faucetAddr !== ''): ?>
+<script>
+// Donation block only — keeps the live amount/name → elek: URI rebuild and
+// the copy-to-clipboard helper. The claim form above is a plain POST.
+const faucetAddr = <?= json_encode($faucetAddr, JSON_THROW_ON_ERROR) ?>;
+
+function buildPayUri() {
+  if (!faucetAddr) return '';
+  const amtRaw = parseFloat(document.getElementById('donate-amount')?.value || '1');
+  const amt    = (Number.isFinite(amtRaw) && amtRaw > 0) ? amtRaw : 1;
+  const name   = (document.getElementById('donor-name')?.value || '').trim();
+  const label  = 'Faucet Donation' + (name ? ' ' + name : '');
+  return 'elek:' + faucetAddr
+       + '?amount=' + amt.toFixed(8)
+       + '&label='  + encodeURIComponent(label);
+}
+function refreshPayment() {
+  const amtRaw = parseFloat(document.getElementById('donate-amount')?.value || '1');
+  const amt    = (Number.isFinite(amtRaw) && amtRaw > 0) ? amtRaw : 1;
+  const name   = (document.getElementById('donor-name')?.value || '').trim();
+  const memo   = 'Faucet Donation' + (name ? ' ' + name : '');
+  const ea = document.getElementById('pi-amount'); if (ea) ea.textContent = amt.toFixed(8) + ' ELEK';
+  const em = document.getElementById('pi-memo');   if (em) em.textContent = memo;
+  const eu = document.getElementById('pay-uri');   if (eu) eu.textContent = buildPayUri();
+}
+document.getElementById('donate-amount')?.addEventListener('input', refreshPayment);
+document.getElementById('donor-name')?.addEventListener('input', refreshPayment);
+refreshPayment();
+
+function copyText(text, btn) {
+  const origText = btn.textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  }
+  btn.textContent = '✓ ' + origText;
+  btn.classList.add('copied');
+  setTimeout(() => { btn.textContent = origText; btn.classList.remove('copied'); }, 1500);
+}
+document.getElementById('btn-copy-uri')?.addEventListener('click', function() {
+  copyText(buildPayUri(), this);
+});
+</script>
+<?php endif; ?>
+
 </body>
 </html>

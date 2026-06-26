@@ -133,4 +133,6 @@ return [
     'inst.err.admin_required'   => 'Admin-Benutzer + Passwort (≥10 Zeichen) benötigt.',
     'inst.err.cfg_write'        => 'config.php konnte nicht geschrieben werden. Berechtigungen prüfen.',
     'inst.err.schema'           => 'schema.sql nicht lesbar',
+
+    'footer.presented_by'       => 'Bereitgestellt von',
 ];
