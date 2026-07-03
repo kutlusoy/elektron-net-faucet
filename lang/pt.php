@@ -73,6 +73,7 @@ return [
     'set.explorer_url'          => 'Prefixo URL explorador',
     'set.default_lang'          => 'Idioma padrão',
     'set.rpc_host'              => 'Host RPC',
+    'set.rpc_host_hint'         => 'Para um nó noutro servidor, não indique aqui diretamente o seu IP público — consulte «Running the node on a separate host» no README (túnel SSH / WireGuard / terminador TLS). O bitcoin.conf padrão do nó só permite RPC a partir de 127.0.0.1.',
     'set.rpc_port'              => 'Porta RPC',
     'set.rpc_user'              => 'Utilizador RPC',
     'set.rpc_pass'              => 'Palavra-passe RPC (deixar em branco para manter)',
