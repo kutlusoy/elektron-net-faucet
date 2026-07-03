@@ -83,7 +83,7 @@ final class RpcClient
      */
     private static function connectErrorHint(int $errno): string
     {
-        // 6 = CURLE_COULDNT_RESOLVE_HOST, 7 = CURLE_COULDNT_CONNECT, 28 = CURLE_OPERATION_TIMEDOUTED
+        // 6 = CURLE_COULDNT_RESOLVE_HOST, 7 = CURLE_COULDNT_CONNECT, 28 = CURLE_OPERATION_TIMEDOUT
         if (!in_array($errno, [6, 7, 28], true)) {
             return '';
         }
