@@ -73,6 +73,7 @@ return [
     'set.explorer_url'          => 'Explorer-URL-Präfix (TXID wird angehängt)',
     'set.default_lang'          => 'Standardsprache',
     'set.rpc_host'              => 'RPC-Host',
+    'set.rpc_host_hint'         => 'Bei einem Node auf einem anderen Server hier nicht direkt dessen öffentliche IP eintragen — siehe „Running the node on a separate host“ im README (SSH-Tunnel / WireGuard / TLS-Terminator). Die Standard-bitcoin.conf des Node erlaubt RPC nur von 127.0.0.1.',
     'set.rpc_port'              => 'RPC-Port',
     'set.rpc_user'              => 'RPC-Benutzer',
     'set.rpc_pass'              => 'RPC-Passwort (leer lassen = beibehalten)',
