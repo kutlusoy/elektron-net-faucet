@@ -298,6 +298,7 @@ $flash = Flash::take();
 
     <fieldset><legend><?= he('sec.rpc') ?></legend>
       <label><?= he('set.rpc_host') ?><input type="text" name="rpc_host" value="<?= h($s['rpc_host'] ?? '127.0.0.1') ?>" required></label>
+      <p class="hint"><?= he('set.rpc_host_hint') ?></p>
       <label><?= he('set.rpc_port') ?><input type="number" name="rpc_port" value="<?= h($s['rpc_port'] ?? '8332') ?>"></label>
       <label><?= he('set.rpc_user') ?><input type="text" name="rpc_user" value="<?= h($s['rpc_user'] ?? '') ?>"></label>
       <label><?= he('set.rpc_pass') ?><input type="password" name="rpc_pass" autocomplete="new-password"></label>

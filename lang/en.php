@@ -73,6 +73,7 @@ return [
     'set.explorer_url'          => 'Explorer URL prefix (txid is appended)',
     'set.default_lang'          => 'Default language',
     'set.rpc_host'              => 'RPC host',
+    'set.rpc_host_hint'         => 'For a node on a different server, do not put its public IP here directly — see "Running the node on a separate host" in the README (SSH tunnel / WireGuard / TLS terminator). The node\'s default bitcoin.conf only allows RPC from 127.0.0.1.',
     'set.rpc_port'              => 'RPC port',
     'set.rpc_user'              => 'RPC user',
     'set.rpc_pass'              => 'RPC password (leave blank to keep)',

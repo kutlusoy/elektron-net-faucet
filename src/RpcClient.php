@@ -53,7 +53,7 @@ final class RpcClient
         curl_close($ch);
 
         if ($errno !== 0) {
-            throw new \RuntimeException("RPC connection error ($errno): $errstr");
+            throw new \RuntimeException("RPC connection error ($errno): $errstr" . self::connectErrorHint($errno));
         }
         if ($resp === false || $resp === '') {
             throw new \RuntimeException("RPC empty response (HTTP $httpCode)");
@@ -72,6 +72,27 @@ final class RpcClient
             throw new RpcException((string)$msg, $code);
         }
         return $data['result'] ?? null;
+    }
+
+    /**
+     * curl_errno() codes that mean "we never got as far as talking HTTP to the node".
+     * For a faucet running on a separate host from the node, this is almost always either
+     * the node's bitcoin.conf still restricting RPC to rpcbind=127.0.0.1/rpcallowip=127.0.0.1
+     * (the default), or a firewall/router silently dropping the port. A bare curl error
+     * leaves operators guessing, so point them at the fix instead.
+     */
+    private static function connectErrorHint(int $errno): string
+    {
+        // 6 = CURLE_COULDNT_RESOLVE_HOST, 7 = CURLE_COULDNT_CONNECT, 28 = CURLE_OPERATION_TIMEDOUT
+        if (!in_array($errno, [6, 7, 28], true)) {
+            return '';
+        }
+        return ' — if the node runs on a different server than the faucet, this is almost '
+            . 'always the node\'s bitcoin.conf still restricting RPC to '
+            . 'rpcbind=127.0.0.1/rpcallowip=127.0.0.1 (the default), or a firewall/router '
+            . 'dropping the port. Do not just open the RPC port to the internet - see '
+            . '"Running the node on a separate host" in the faucet README for the SSH '
+            . 'tunnel / WireGuard / TLS-terminator setup.';
     }
 
     /**
