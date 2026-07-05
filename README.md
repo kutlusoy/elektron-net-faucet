@@ -155,6 +155,60 @@ deposit address.
 
 ### Part 2 — Install the website (faucet)
 
+#### Docker (recommended for Windows)
+
+If the faucet and/or the `elektron-net` node run on Windows, Docker is the
+fastest path to a working install — no PHP/MySQL setup on the host at all.
+This is an **alternative** to the manual LAMP install in the rest of this
+section, which remains fully supported and unchanged; `public/install.php`
+still works if you deploy without Docker.
+
+Requirements: [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+with the WSL2 backend.
+
+```powershell
+PS> git clone https://github.com/kutlusoy/elektron-net-faucet.git
+PS> cd elektron-net-faucet
+PS> Copy-Item .env.example .env
+# edit .env: at minimum set FAUCET_DB_PASS, FAUCET_DB_ROOT_PASS,
+# FAUCET_ADMIN_PASS, and the RPC block (see below)
+PS> docker compose up -d --build
+```
+
+Open `http://127.0.0.1:8080/` (or whatever `FAUCET_PORT` you set). Log into
+`admin.php` with `FAUCET_ADMIN_USER`/`FAUCET_ADMIN_PASS` from `.env`.
+
+**`.env` is a first-install-only seed.** `bin/docker-install.php` runs once,
+on the very first container start, and writes its values into the database.
+After that, the Admin Panel is fully authoritative again — editing `.env`
+and restarting the container has no further effect. This mirrors the node
+RPC / wallet-name conventions used in `elektron-net-ppool`'s `.env.example`,
+adapted to the faucet's DB-backed settings.
+
+**Reaching a node on the same Windows host.** If `elektron-net` runs
+natively on the same Windows machine as Docker Desktop (outside any
+container), `FAUCET_RPC_HOST=http://127.0.0.1` will **not** work from
+inside the container — use `FAUCET_RPC_HOST=http://host.docker.internal`
+instead (already wired up via `extra_hosts: host.docker.internal:host-gateway`
+in `docker-compose.yml`). On the node side, add
+`rpcallowip=172.16.0.0/12` to `bitcoin.conf` (covers Docker Desktop's
+typical subnets) — `rpcbind=127.0.0.1` needs no change. If the node is on a
+different machine, point `FAUCET_RPC_HOST` at it directly, or use one of
+the patterns in [Running the node on a separate host](#running-the-node-on-a-separate-host)
+below (Docker only changes how the faucet process itself is launched, not
+the RPC networking model).
+
+**Multi-wallet nodes.** `FAUCET_WALLET_NAME` in `.env` is the Docker
+equivalent of the "Wallet name" field in the admin panel's Wallet RPC
+settings (see [Configuration reference](#configuration-reference)) — set
+it only if your node has more than one wallet loaded at once.
+
+Data persists in `./data/db` (MariaDB) and `./data/config` (`config.php` +
+`.installed`) next to the compose file — back these up like you would any
+other install.
+
+---
+
 #### 2.1  Pick a webhost
 
 Any host that gives you PHP 8.1+ with the `pdo_mysql`, `curl`, `openssl`,

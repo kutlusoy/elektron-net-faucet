@@ -1,0 +1,8 @@
+.git
+.gitignore
+.env
+config.php
+.installed
+data/
+README.md
+LICENSE

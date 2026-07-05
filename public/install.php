@@ -2,23 +2,19 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../src/I18n.php';
+require_once __DIR__ . '/../src/Autoload.php';
+\ElektronFaucet\Autoload::register();
+
 \ElektronFaucet\I18n::boot('en');
 if (isset($_GET['lang']) && is_string($_GET['lang'])) {
     \ElektronFaucet\I18n::setLocale($_GET['lang']);
 }
 
-$lockFile = dirname(__DIR__) . '/.installed';
+$lockFile = \ElektronFaucet\Installer::lockFilePath();
 if (is_file($lockFile)) {
     http_response_code(403);
     exit(__('inst.already'));
 }
-
-spl_autoload_register(static function (string $class): void {
-    $prefix = 'ElektronFaucet\\';
-    if (!str_starts_with($class, $prefix)) return;
-    $file = __DIR__ . '/../src/' . substr($class, strlen($prefix)) . '.php';
-    if (is_file($file)) require_once $file;
-});
 
 function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 
@@ -38,39 +34,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['step'] ?? '') === 
     if ($adminUser === '' || strlen($adminPass) < 10) $errors[] = __('inst.err.admin_required');
 
     if (empty($errors)) {
+        $cfgPath = \ElektronFaucet\Installer::configPath();
         try {
-            $appKey = bin2hex(random_bytes(32));
-            $cfgPath = dirname(__DIR__) . '/config.php';
-            $cfg = "<?php\nreturn [\n"
-                 . "    'db_host' => " . var_export($dbHost, true) . ",\n"
-                 . "    'db_port' => " . var_export($dbPort, true) . ",\n"
-                 . "    'db_name' => " . var_export($dbName, true) . ",\n"
-                 . "    'db_user' => " . var_export($dbUser, true) . ",\n"
-                 . "    'db_pass' => " . var_export($dbPass, true) . ",\n"
-                 . "    'app_key' => " . var_export($appKey, true) . ",\n"
-                 . "];\n";
-            if (file_put_contents($cfgPath, $cfg) === false) {
-                throw new \RuntimeException(__('inst.err.cfg_write'));
-            }
-            @chmod($cfgPath, 0600);
+            \ElektronFaucet\Installer::writeConfigFile($cfgPath, [
+                'db_host' => $dbHost,
+                'db_port' => $dbPort,
+                'db_name' => $dbName,
+                'db_user' => $dbUser,
+                'db_pass' => $dbPass,
+                'app_key' => bin2hex(random_bytes(32)),
+            ]);
 
             \ElektronFaucet\Config::load($cfgPath);
 
-            $schema = file_get_contents(dirname(__DIR__) . '/sql/schema.sql');
-            if ($schema === false) throw new \RuntimeException(__('inst.err.schema'));
-            foreach (array_filter(array_map('trim', explode(';', $schema))) as $stmt) {
-                if ($stmt === '') continue;
-                if (str_starts_with($stmt, '--')) continue;
-                \ElektronFaucet\Db::pdo()->exec($stmt);
-            }
+            \ElektronFaucet\Installer::applySchema();
 
-            \ElektronFaucet\Db::exec(
-                'INSERT INTO admin_users (username, password_hash) VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE password_hash = VALUES(password_hash)',
-                [$adminUser, password_hash($adminPass, PASSWORD_ARGON2ID)]
-            );
+            \ElektronFaucet\Installer::createAdmin($adminUser, $adminPass);
 
-            $defaults = [
+            \ElektronFaucet\Installer::seedDefaultSettings([
                 'faucet_title'        => 'Elektron Net Faucet',
                 'faucet_message'      => 'Claim some free ELEK!',
                 'amount_elek'         => '0.001',
@@ -81,16 +62,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['step'] ?? '') === 
                 'rpc_host'            => '127.0.0.1',
                 'rpc_port'            => '8332',
                 'default_lang'        => \ElektronFaucet\I18n::locale(),
-            ];
-            foreach ($defaults as $k => $v) \ElektronFaucet\Db::setSetting($k, $v);
+            ]);
 
-            file_put_contents($lockFile, date('c'));
-            @chmod($lockFile, 0600);
+            \ElektronFaucet\Installer::markInstalled($lockFile);
 
             $done = true;
         } catch (\Throwable $e) {
             $errors[] = $e->getMessage();
-            @unlink(dirname(__DIR__) . '/config.php');
+            @unlink($cfgPath);
         }
     }
 }
