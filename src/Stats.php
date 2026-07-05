@@ -97,6 +97,14 @@ final class Stats
      * eventually aging out of the RPC scan window. Throttled via the
      * `donations_synced_at` setting so a busy public page doesn't hit the
      * node's RPC on every request.
+     *
+     * Caveat: this only survives pruning (`prune=` in bitcoin.conf) as long
+     * as the wallet already recorded the donation while its block was still
+     * on disk. If the wallet ever needs `rescanblockchain` to pick up
+     * donations it doesn't have yet (fresh wallet import, restored backup,
+     * a sync gap longer than the prune window), a pruned node can only
+     * rescan back to the prune point — anything older is unrecoverable via
+     * RPC. See the "Donations" section in README.md.
      */
     public static function syncDonations(RpcClient $rpc, string $address, int $minIntervalSeconds = 30, int $scanLimit = 500): void
     {
