@@ -102,7 +102,7 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
   <p class="amount"><?= he('faucet.per_claim', ['amount' => h($amount)]) ?></p>
 
   <div class="stats home-stats">
-    <div class="kpi">
+    <div class="kpi kpi-wide">
       <div class="label"><?= he('faucet.stats.balance_label') ?></div>
       <div class="value"><?= $walletBalanceSat !== null ? h(RateLimiter::satToElek($walletBalanceSat)) . ' ELEK' : '—' ?></div>
       <?php if ($walletBalanceSat !== null && $dailyBudgetSat > 0):

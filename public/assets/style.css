@@ -263,6 +263,14 @@ body.admin { background: var(--bg); }
 .kpi .label { color: var(--muted); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; }
 .kpi .value { font-size: 1.4rem; font-weight: 700; margin: 4px 0; }
 .kpi .sub   { color: var(--muted); font-size: .8rem; }
+
+/* Homepage KPI row: balance tile spans the full width on its own row,
+   the other two tiles share the row below at 50% each. */
+.home-stats { grid-template-columns: 1fr 1fr; }
+.home-stats .kpi-wide { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+    .home-stats { grid-template-columns: 1fr; }
+}
 section {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 10px; padding: 16px; margin-bottom: 16px;
