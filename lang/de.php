@@ -114,6 +114,9 @@ return [
     'donors.no_addr'            => 'Keine Faucet-Adresse konfiguriert. Bitte in Admin → Einstellungen setzen.',
     'donors.rpc_error'          => 'Transaktionen konnten nicht geladen werden:',
     'donors.total_received'     => 'Gesamt erhalten: {amount} ELEK in {count} Transaktion(en)',
+    'donors.pagination.prev'    => 'Zurück',
+    'donors.pagination.next'    => 'Weiter',
+    'donors.pagination.page_info' => 'Seite {page} von {pages}',
 
     'inst.title'                => 'Faucet — Installation',
     'inst.already'              => 'Bereits installiert. .installed-Datei löschen zum Wiederholen.',

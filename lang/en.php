@@ -116,6 +116,9 @@ return [
     'donors.no_addr'            => 'No faucet address configured. Set it in Admin → Settings.',
     'donors.rpc_error'          => 'Could not load transactions:',
     'donors.total_received'     => 'Total received: {amount} ELEK in {count} transaction(s)',
+    'donors.pagination.prev'    => 'Previous',
+    'donors.pagination.next'    => 'Next',
+    'donors.pagination.page_info' => 'Page {page} of {pages}',
 
     // Installer
     'inst.title'                => 'Faucet — Installation',

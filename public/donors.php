@@ -24,6 +24,9 @@ $txList        = [];
 $rpcErr        = null;
 $totalReceived = 0.0;
 
+$perPage    = 10;
+$maxEntries = 100;
+
 if ($faucetAddr !== '') {
     try {
         $rpc = Wallet::fromSettings()->rpc();
@@ -32,16 +35,25 @@ if ($faucetAddr !== '') {
             foreach ($all as $tx) {
                 if (($tx['category'] ?? '') === 'receive'
                     && ($tx['address']  ?? '') === $faucetAddr) {
-                    $txList[]       = $tx;
-                    $totalReceived += (float)($tx['amount'] ?? 0);
+                    $txList[] = $tx;
                 }
             }
             usort($txList, fn($a, $b) => ($b['time'] ?? 0) <=> ($a['time'] ?? 0));
+            $txList = array_slice($txList, 0, $maxEntries);
+            foreach ($txList as $tx) {
+                $totalReceived += (float)($tx['amount'] ?? 0);
+            }
         }
     } catch (\Throwable $e) {
         $rpcErr = $e->getMessage();
     }
 }
+
+$totalPages = max(1, (int)ceil(count($txList) / $perPage));
+$page       = (int)($_GET['page'] ?? 1);
+if ($page < 1) $page = 1;
+if ($page > $totalPages) $page = $totalPages;
+$pageItems  = array_slice($txList, ($page - 1) * $perPage, $perPage);
 
 function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
 ?>
@@ -101,7 +113,7 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
           <th><?= he('donors.col.amount') ?></th>
         </tr></thead>
         <tbody>
-          <?php foreach ($txList as $tx): ?>
+          <?php foreach ($pageItems as $tx): ?>
             <?php
               $confs = (int)($tx['confirmations'] ?? 0);
               $txid  = (string)($tx['txid'] ?? '');
@@ -129,6 +141,28 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
         </tbody>
       </table>
     </div>
+
+    <?php if ($totalPages > 1):
+      $langQS  = isset($_GET['lang']) ? '&lang=' . rawurlencode((string)$_GET['lang']) : '';
+      $prevUrl = '?page=' . ($page - 1) . $langQS;
+      $nextUrl = '?page=' . ($page + 1) . $langQS;
+    ?>
+      <nav class="pagination">
+        <?php if ($page > 1): ?>
+          <a class="pagination-link" href="<?= h($prevUrl) ?>">&larr; <?= he('donors.pagination.prev') ?></a>
+        <?php else: ?>
+          <span class="pagination-link disabled">&larr; <?= he('donors.pagination.prev') ?></span>
+        <?php endif; ?>
+
+        <span class="pagination-info"><?= he('donors.pagination.page_info', ['page' => (string)$page, 'pages' => (string)$totalPages]) ?></span>
+
+        <?php if ($page < $totalPages): ?>
+          <a class="pagination-link" href="<?= h($nextUrl) ?>"><?= he('donors.pagination.next') ?> &rarr;</a>
+        <?php else: ?>
+          <span class="pagination-link disabled"><?= he('donors.pagination.next') ?> &rarr;</span>
+        <?php endif; ?>
+      </nav>
+    <?php endif; ?>
   <?php endif; ?>
 
   <footer>

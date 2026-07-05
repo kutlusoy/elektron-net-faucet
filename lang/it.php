@@ -115,6 +115,9 @@ return [
     'donors.no_addr'            => 'Nessun indirizzo faucet configurato.',
     'donors.rpc_error'          => 'Impossibile caricare le transazioni:',
     'donors.total_received'     => 'Totale ricevuto: {amount} ELEK in {count} transazione/i',
+    'donors.pagination.prev'    => 'Precedente',
+    'donors.pagination.next'    => 'Successiva',
+    'donors.pagination.page_info' => 'Pagina {page} di {pages}',
 
     'inst.title'    => 'Faucet — Installazione',
     'inst.already'  => 'Già installato.',

@@ -236,6 +236,18 @@ footer { margin-top: 22px; text-align: center; font-size: .8rem; color: var(--mu
 .donors-tx     { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .donors-amount { white-space: nowrap; color: var(--ok); font-weight: 600; text-align: right; }
 
+.pagination {
+    display: flex; align-items: center; justify-content: center;
+    gap: 16px; margin-top: 18px; font-size: .85rem;
+}
+.pagination-link {
+    color: var(--accent); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 12px;
+}
+.pagination-link:hover { background: var(--card); }
+.pagination-link.disabled { color: var(--muted); opacity: .5; pointer-events: none; }
+.pagination-info { color: var(--muted); }
+
 /* ── Admin layout ── */
 body.admin { background: var(--bg); }
 .stats {
