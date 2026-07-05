@@ -21,24 +21,25 @@ $title      = $s['faucet_title'] ?? __('faucet.title');
 $faucetAddr = trim((string)($s['sender_addr'] ?? ''));
 $explorer   = $s['explorer_url'] ?? '';
 
-$txList        = [];
-$rpcErr        = null;
-$totalReceived = 0.0;
+$rpcErr = null;
 
 $perPage    = 10;
 $maxEntries = 100;
 
+// Best-effort — the ledger below already holds whatever was captured by a
+// previous sync, so a failed/skipped sync here just means today's page
+// view might be missing the very latest donation, not that the totals or
+// history disappear.
 if ($faucetAddr !== '') {
     try {
-        $rpc    = Wallet::fromSettings()->rpc();
-        $txList = array_slice(Stats::donationsTo($rpc, $faucetAddr), 0, $maxEntries);
-        foreach ($txList as $tx) {
-            $totalReceived += (float)($tx['amount'] ?? 0);
-        }
+        Stats::syncDonations(Wallet::fromSettings()->rpc(), $faucetAddr);
     } catch (\Throwable $e) {
         $rpcErr = $e->getMessage();
     }
 }
+
+$totalReceived = Stats::totalDonatedSat() / 100_000_000;
+$txList        = Stats::recentDonations($maxEntries);
 
 $totalPages = max(1, (int)ceil(count($txList) / $perPage));
 $page       = (int)($_GET['page'] ?? 1);
@@ -46,7 +47,7 @@ if ($page < 1) $page = 1;
 if ($page > $totalPages) $page = $totalPages;
 $pageItems  = array_slice($txList, ($page - 1) * $perPage, $perPage);
 
-function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
+function fmtDate(?string $dt): string { return $dt ? date('Y-m-d H:i', strtotime($dt)) : '—'; }
 ?>
 <!doctype html>
 <html lang="<?= h($locale) ?>">
@@ -79,14 +80,12 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
   <h2><?= he('donors.title') ?></h2>
   <p class="lead"><?= he('donors.lead') ?></p>
 
-  <?php if ($faucetAddr === ''): ?>
-    <p class="muted"><?= he('donors.no_addr') ?></p>
-
-  <?php elseif ($rpcErr !== null): ?>
+  <?php if ($rpcErr !== null): ?>
     <div class="result err"><?= h(__('donors.rpc_error') . ' ' . $rpcErr) ?></div>
+  <?php endif; ?>
 
-  <?php elseif (empty($txList)): ?>
-    <p class="muted"><?= he('donors.none') ?></p>
+  <?php if (empty($txList)): ?>
+    <p class="muted"><?= he($faucetAddr === '' && $rpcErr === null ? 'donors.no_addr' : 'donors.none') ?></p>
 
   <?php else: ?>
     <p class="donors-total">
@@ -104,15 +103,14 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
           <th><?= he('donors.col.amount') ?></th>
         </tr></thead>
         <tbody>
-          <?php foreach ($pageItems as $tx): ?>
+          <?php foreach ($pageItems as $row): ?>
             <?php
-              $confs = (int)($tx['confirmations'] ?? 0);
-              $txid  = (string)($tx['txid'] ?? '');
-              $amt   = (float)($tx['amount'] ?? 0);
-              $time  = (int)($tx['time'] ?? $tx['timereceived'] ?? 0);
+              $confs = (int)($row['confirmations'] ?? 0);
+              $txid  = (string)($row['txid'] ?? '');
+              $amt   = (int)($row['amount_satoshi'] ?? 0) / 100_000_000;
             ?>
             <tr>
-              <td class="donors-date"><?= h($time ? fmtDate($time) : '—') ?></td>
+              <td class="donors-date"><?= h(fmtDate($row['block_time'] ?? null)) ?></td>
               <td class="donors-conf">
                 <span class="<?= $confs >= 6 ? 'conf-ok' : 'conf-pending' ?>">
                   <?= $confs >= 6 ? '✓' : ($confs . ' conf') ?>

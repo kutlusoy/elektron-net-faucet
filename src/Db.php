@@ -157,6 +157,22 @@ final class Db
                 created_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 INDEX idx_ip_created (ip, created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+            // Ledger of donations seen via Stats::syncDonations(). Once a row
+            // is written it is permanent, so totals stay correct even after
+            // the sender address is rotated or a donation ages out of the
+            // node's listtransactions scan window.
+            "CREATE TABLE IF NOT EXISTS donations (
+                txid           CHAR(64)        NOT NULL PRIMARY KEY,
+                address        VARCHAR(90)     NOT NULL,
+                amount_satoshi BIGINT UNSIGNED NOT NULL,
+                confirmations  INT UNSIGNED    NOT NULL DEFAULT 0,
+                block_time     DATETIME        NULL,
+                first_seen_at  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_address    (address),
+                INDEX idx_block_time (block_time)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         ];
 
         foreach ($statements as $sql) {

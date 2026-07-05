@@ -29,16 +29,18 @@ $totalSent   = RateLimiter::satToElek(Stats::totalSentSat());
 $locale      = I18n::locale();
 $faucetAddr  = trim((string)($s['sender_addr'] ?? ''));
 
-// Best-effort — a donation address is optional and the RPC call can fail
-// (node unreachable, wallet locked out); the stat is simply hidden then.
-$totalDonated = null;
+// The donations ledger is DB-backed (see Stats::syncDonations), so the
+// total is always available and unaffected by sender-address rotation or
+// the node's RPC scan window. Syncing fresh data is best-effort and
+// throttled — if it fails or is skipped, the total just reflects the last
+// successful sync instead of disappearing.
 if ($faucetAddr !== '') {
     try {
-        $rpc = Wallet::fromSettings()->rpc();
-        $totalDonated = array_sum(array_column(Stats::donationsTo($rpc, $faucetAddr), 'amount'));
+        Stats::syncDonations(Wallet::fromSettings()->rpc(), $faucetAddr);
     } catch (\Throwable) {
     }
 }
+$totalDonated = Stats::totalDonatedSat() / 100_000_000;
 
 // The flash payload may carry the txid behind a NUL separator so we can
 // render an explorer link on success without leaking it into the URL bar.
@@ -92,12 +94,10 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
       <div class="label"><?= he('faucet.stats.given_label') ?></div>
       <div class="value"><?= h($totalSent) ?> ELEK</div>
     </div>
-    <?php if ($totalDonated !== null): ?>
     <div class="kpi">
       <div class="label"><?= he('faucet.stats.donated_label') ?></div>
-      <div class="value"><?= h(number_format((float)$totalDonated, 4)) ?> ELEK</div>
+      <div class="value"><?= h(number_format($totalDonated, 4)) ?> ELEK</div>
     </div>
-    <?php endif; ?>
   </div>
 
   <?php if ($flash !== null): ?>
