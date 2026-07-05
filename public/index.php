@@ -9,6 +9,7 @@ use ElektronFaucet\Captcha;
 use ElektronFaucet\Csrf;
 use ElektronFaucet\Stats;
 use ElektronFaucet\RateLimiter;
+use ElektronFaucet\Wallet;
 use ElektronFaucet\I18n;
 use ElektronFaucet\Flash;
 
@@ -27,6 +28,17 @@ $explorer    = $s['explorer_url'] ?? '';
 $totalSent   = RateLimiter::satToElek(Stats::totalSentSat());
 $locale      = I18n::locale();
 $faucetAddr  = trim((string)($s['sender_addr'] ?? ''));
+
+// Best-effort — a donation address is optional and the RPC call can fail
+// (node unreachable, wallet locked out); the stat is simply hidden then.
+$totalDonated = null;
+if ($faucetAddr !== '') {
+    try {
+        $rpc = Wallet::fromSettings()->rpc();
+        $totalDonated = array_sum(array_column(Stats::donationsTo($rpc, $faucetAddr), 'amount'));
+    } catch (\Throwable) {
+    }
+}
 
 // The flash payload may carry the txid behind a NUL separator so we can
 // render an explorer link on success without leaking it into the URL bar.
@@ -73,10 +85,20 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 
 <main class="card">
   <p class="lead"><?= h($message) ?></p>
-  <p class="amount">
-    <?= he('faucet.per_claim', ['amount' => h($amount)]) ?> &middot;
-    <?= he('faucet.total_given', ['amount' => h($totalSent)]) ?>
-  </p>
+  <p class="amount"><?= he('faucet.per_claim', ['amount' => h($amount)]) ?></p>
+
+  <div class="stats home-stats">
+    <div class="kpi">
+      <div class="label"><?= he('faucet.stats.given_label') ?></div>
+      <div class="value"><?= h($totalSent) ?> ELEK</div>
+    </div>
+    <?php if ($totalDonated !== null): ?>
+    <div class="kpi">
+      <div class="label"><?= he('faucet.stats.donated_label') ?></div>
+      <div class="value"><?= h(number_format((float)$totalDonated, 4)) ?> ELEK</div>
+    </div>
+    <?php endif; ?>
+  </div>
 
   <?php if ($flash !== null): ?>
     <div class="result <?= $flash['ok'] ? 'ok' : 'err' ?>">

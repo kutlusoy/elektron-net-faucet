@@ -6,6 +6,7 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 
 use ElektronFaucet\Db;
 use ElektronFaucet\I18n;
+use ElektronFaucet\Stats;
 use ElektronFaucet\Wallet;
 
 if (isset($_GET['lang']) && is_string($_GET['lang'])) {
@@ -29,20 +30,10 @@ $maxEntries = 100;
 
 if ($faucetAddr !== '') {
     try {
-        $rpc = Wallet::fromSettings()->rpc();
-        $all = $rpc->call('listtransactions', ['*', 500, 0, true]);
-        if (is_array($all)) {
-            foreach ($all as $tx) {
-                if (($tx['category'] ?? '') === 'receive'
-                    && ($tx['address']  ?? '') === $faucetAddr) {
-                    $txList[] = $tx;
-                }
-            }
-            usort($txList, fn($a, $b) => ($b['time'] ?? 0) <=> ($a['time'] ?? 0));
-            $txList = array_slice($txList, 0, $maxEntries);
-            foreach ($txList as $tx) {
-                $totalReceived += (float)($tx['amount'] ?? 0);
-            }
+        $rpc    = Wallet::fromSettings()->rpc();
+        $txList = array_slice(Stats::donationsTo($rpc, $faucetAddr), 0, $maxEntries);
+        foreach ($txList as $tx) {
+            $totalReceived += (float)($tx['amount'] ?? 0);
         }
     } catch (\Throwable $e) {
         $rpcErr = $e->getMessage();

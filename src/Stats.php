@@ -67,4 +67,25 @@ final class Stats
              FROM claims ORDER BY id DESC LIMIT $limit"
         );
     }
+
+    /**
+     * Incoming donations to $address, newest first. Read live from the node
+     * via RPC — donations aren't tracked in our own DB.
+     *
+     * @return array<int,array<string,mixed>>
+     */
+    public static function donationsTo(RpcClient $rpc, string $address, int $scanLimit = 500): array
+    {
+        $out = [];
+        $txs = $rpc->call('listtransactions', ['*', $scanLimit, 0, true]);
+        if (is_array($txs)) {
+            foreach ($txs as $tx) {
+                if (($tx['category'] ?? '') === 'receive' && ($tx['address'] ?? '') === $address) {
+                    $out[] = $tx;
+                }
+            }
+            usort($out, fn($a, $b) => ($b['time'] ?? 0) <=> ($a['time'] ?? 0));
+        }
+        return $out;
+    }
 }
