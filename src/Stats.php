@@ -132,6 +132,37 @@ final class Stats
         Db::setSetting('donations_synced_at', (string)time());
     }
 
+    /**
+     * Live wallet balance in satoshis, throttled via `wallet_balance_cache_at`/
+     * `wallet_balance_cache_sat` so the public homepage never pays for a live
+     * RPC round-trip on every view. Unlike syncDonations(), also refreshes the
+     * timestamp on RPC failure (not just success), so a down node is retried
+     * at most once per window instead of stalling every page view.
+     *
+     * @return int|null Cached/fresh balance in satoshis, or null if no
+     *                   successful read has ever been cached (unknown state —
+     *                   callers must NOT treat null as "empty").
+     */
+    public static function cachedWalletBalanceSat(RpcClient $rpc, int $minIntervalSeconds = 60): ?int
+    {
+        $last = (int)Db::getSetting('wallet_balance_cache_at', '0');
+        if (time() - $last < $minIntervalSeconds) {
+            $cached = Db::getSetting('wallet_balance_cache_sat');
+            return $cached === null ? null : (int)$cached;
+        }
+
+        try {
+            $sat = RateLimiter::elekToSat((string)$rpc->call('getbalance', []));
+            Db::setSetting('wallet_balance_cache_sat', (string)$sat);
+            Db::setSetting('wallet_balance_cache_at', (string)time());
+            return $sat;
+        } catch (\Throwable) {
+            Db::setSetting('wallet_balance_cache_at', (string)time());
+            $cached = Db::getSetting('wallet_balance_cache_sat');
+            return $cached === null ? null : (int)$cached;
+        }
+    }
+
     public static function totalDonatedSat(): int
     {
         return (int)Db::fetchValue('SELECT COALESCE(SUM(amount_satoshi),0) FROM donations');

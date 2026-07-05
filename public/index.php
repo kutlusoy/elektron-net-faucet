@@ -42,6 +42,18 @@ if ($faucetAddr !== '') {
 }
 $totalDonated = Stats::totalDonatedSat() / 100_000_000;
 
+// Best-effort, throttled balance check — must never break the public
+// homepage if the node is down. $walletBalanceSat stays null (banner
+// suppressed) until a successful read has ever been cached.
+$amountSat        = RateLimiter::elekToSat((string)$amount);
+$dailyBudgetSat   = RateLimiter::elekToSat((string)($s['daily_budget'] ?? '0'));
+$walletBalanceSat = null;
+try {
+    $walletBalanceSat = Stats::cachedWalletBalanceSat(Wallet::fromSettings()->rpc());
+} catch (\Throwable) {
+}
+$faucetEmpty = $amountSat > 0 && $walletBalanceSat !== null && $walletBalanceSat < $amountSat;
+
 // The flash payload may carry the txid behind a NUL separator so we can
 // render an explorer link on success without leaking it into the URL bar.
 $flash    = Flash::take();
@@ -91,6 +103,19 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 
   <div class="stats home-stats">
     <div class="kpi">
+      <div class="label"><?= he('faucet.stats.balance_label') ?></div>
+      <div class="value"><?= $walletBalanceSat !== null ? h(RateLimiter::satToElek($walletBalanceSat)) . ' ELEK' : '—' ?></div>
+      <?php if ($walletBalanceSat !== null && $dailyBudgetSat > 0):
+        $runwayDays = intdiv($walletBalanceSat, $dailyBudgetSat);
+      ?>
+        <div class="sub">
+          <?= $runwayDays > 0
+                ? he('faucet.stats.runway', ['days' => $runwayDays])
+                : he('faucet.stats.runway_lt1') ?>
+        </div>
+      <?php endif; ?>
+    </div>
+    <div class="kpi">
       <div class="label"><?= he('faucet.stats.given_label') ?></div>
       <div class="value"><?= h($totalSent) ?> ELEK</div>
     </div>
@@ -99,6 +124,15 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
       <div class="value"><?= h(number_format($totalDonated, 4)) ?> ELEK</div>
     </div>
   </div>
+
+  <?php if ($faucetEmpty): ?>
+    <div class="result warn">
+      <?= he('faucet.empty_notice') ?>
+      <?php if ($faucetAddr !== ''): ?>
+        <a href="#donate"><?= he('faucet.empty_notice_cta') ?></a>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
 
   <?php if ($flash !== null): ?>
     <div class="result <?= $flash['ok'] ? 'ok' : 'err' ?>">
@@ -129,7 +163,7 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 </main>
 
 <?php if ($faucetAddr !== ''): ?>
-<section class="card donate-section">
+<section class="card donate-section" id="donate">
   <h2><?= he('donate.title') ?></h2>
   <p class="lead"><?= he('donate.lead') ?></p>
 

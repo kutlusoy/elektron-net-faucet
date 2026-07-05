@@ -10,6 +10,7 @@ use ElektronFaucet\Captcha;
 use ElektronFaucet\AddressValidator;
 use ElektronFaucet\RateLimiter;
 use ElektronFaucet\Wallet;
+use ElektronFaucet\RpcException;
 use ElektronFaucet\Logger;
 use ElektronFaucet\Flash;
 
@@ -99,7 +100,19 @@ try {
     );
     Logger::audit(null, 'claim_sent', ['claim_id' => $claimId, 'address' => $address, 'txid' => $txid]);
     $back(true, __('faucet.success'), $txid);
+} catch (RpcException $e) {
+    // Bitcoin-Core JSON-RPC error code -6 = "Insufficient funds" — the one
+    // failure mode a visitor can actually do something about (donate).
+    Db::exec(
+        "UPDATE claims SET status = 'failed', error = ? WHERE id = ?",
+        [substr($e->getMessage(), 0, 1000), $claimId]
+    );
+    Logger::audit(null, 'claim_failed', ['claim_id' => $claimId, 'address' => $address, 'error' => $e->getMessage()]);
+    $back(false, $e->getCode() === -6 ? __('err.insufficient_funds') : __('err.payout_failed'));
 } catch (\Throwable $e) {
+    // Everything else (RPC unreachable, wrong wallet passphrase, fee
+    // estimation failure, ...) stays generic on purpose — don't leak node
+    // internals to the visitor.
     Db::exec(
         "UPDATE claims SET status = 'failed', error = ? WHERE id = ?",
         [substr($e->getMessage(), 0, 1000), $claimId]
