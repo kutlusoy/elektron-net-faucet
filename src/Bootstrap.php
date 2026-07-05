@@ -10,12 +10,8 @@ final class Bootstrap
         ini_set('display_errors', '0');
         error_reporting(E_ALL);
 
-        spl_autoload_register(static function (string $class): void {
-            $prefix = 'ElektronFaucet\\';
-            if (!str_starts_with($class, $prefix)) return;
-            $file = __DIR__ . '/' . substr($class, strlen($prefix)) . '.php';
-            if (is_file($file)) require_once $file;
-        });
+        require_once __DIR__ . '/Autoload.php';
+        Autoload::register();
 
         $configPath = getenv('FAUCET_CONFIG') ?: dirname(__DIR__) . '/config.php';
         if (!is_file($configPath)) {

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../src/Bootstrap.php';
 
 use ElektronFaucet\Db;
 use ElektronFaucet\I18n;
+use ElektronFaucet\Stats;
 use ElektronFaucet\Wallet;
 
 if (isset($_GET['lang']) && is_string($_GET['lang'])) {
@@ -20,30 +21,33 @@ $title      = $s['faucet_title'] ?? __('faucet.title');
 $faucetAddr = trim((string)($s['sender_addr'] ?? ''));
 $explorer   = $s['explorer_url'] ?? '';
 
-$txList        = [];
-$rpcErr        = null;
-$totalReceived = 0.0;
+$rpcErr = null;
 
+$perPage    = 10;
+$maxEntries = 100;
+
+// Best-effort — the ledger below already holds whatever was captured by a
+// previous sync, so a failed/skipped sync here just means today's page
+// view might be missing the very latest donation, not that the totals or
+// history disappear.
 if ($faucetAddr !== '') {
     try {
-        $rpc = Wallet::fromSettings()->rpc();
-        $all = $rpc->call('listtransactions', ['*', 500, 0, true]);
-        if (is_array($all)) {
-            foreach ($all as $tx) {
-                if (($tx['category'] ?? '') === 'receive'
-                    && ($tx['address']  ?? '') === $faucetAddr) {
-                    $txList[]       = $tx;
-                    $totalReceived += (float)($tx['amount'] ?? 0);
-                }
-            }
-            usort($txList, fn($a, $b) => ($b['time'] ?? 0) <=> ($a['time'] ?? 0));
-        }
+        Stats::syncDonations(Wallet::fromSettings()->rpc(), $faucetAddr);
     } catch (\Throwable $e) {
         $rpcErr = $e->getMessage();
     }
 }
 
-function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
+$totalReceived = Stats::totalDonatedSat() / 100_000_000;
+$txList        = Stats::recentDonations($maxEntries);
+
+$totalPages = max(1, (int)ceil(count($txList) / $perPage));
+$page       = (int)($_GET['page'] ?? 1);
+if ($page < 1) $page = 1;
+if ($page > $totalPages) $page = $totalPages;
+$pageItems  = array_slice($txList, ($page - 1) * $perPage, $perPage);
+
+function fmtDate(?string $dt): string { return $dt ? date('Y-m-d H:i', strtotime($dt)) : '—'; }
 ?>
 <!doctype html>
 <html lang="<?= h($locale) ?>">
@@ -76,14 +80,12 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
   <h2><?= he('donors.title') ?></h2>
   <p class="lead"><?= he('donors.lead') ?></p>
 
-  <?php if ($faucetAddr === ''): ?>
-    <p class="muted"><?= he('donors.no_addr') ?></p>
-
-  <?php elseif ($rpcErr !== null): ?>
+  <?php if ($rpcErr !== null): ?>
     <div class="result err"><?= h(__('donors.rpc_error') . ' ' . $rpcErr) ?></div>
+  <?php endif; ?>
 
-  <?php elseif (empty($txList)): ?>
-    <p class="muted"><?= he('donors.none') ?></p>
+  <?php if (empty($txList)): ?>
+    <p class="muted"><?= he($faucetAddr === '' && $rpcErr === null ? 'donors.no_addr' : 'donors.none') ?></p>
 
   <?php else: ?>
     <p class="donors-total">
@@ -101,15 +103,14 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
           <th><?= he('donors.col.amount') ?></th>
         </tr></thead>
         <tbody>
-          <?php foreach ($txList as $tx): ?>
+          <?php foreach ($pageItems as $row): ?>
             <?php
-              $confs = (int)($tx['confirmations'] ?? 0);
-              $txid  = (string)($tx['txid'] ?? '');
-              $amt   = (float)($tx['amount'] ?? 0);
-              $time  = (int)($tx['time'] ?? $tx['timereceived'] ?? 0);
+              $confs = (int)($row['confirmations'] ?? 0);
+              $txid  = (string)($row['txid'] ?? '');
+              $amt   = (int)($row['amount_satoshi'] ?? 0) / 100_000_000;
             ?>
             <tr>
-              <td class="donors-date"><?= h($time ? fmtDate($time) : '—') ?></td>
+              <td class="donors-date"><?= h(fmtDate($row['block_time'] ?? null)) ?></td>
               <td class="donors-conf">
                 <span class="<?= $confs >= 6 ? 'conf-ok' : 'conf-pending' ?>">
                   <?= $confs >= 6 ? '✓' : ($confs . ' conf') ?>
@@ -129,6 +130,28 @@ function fmtDate(int $ts): string { return date('Y-m-d H:i', $ts); }
         </tbody>
       </table>
     </div>
+
+    <?php if ($totalPages > 1):
+      $langQS  = isset($_GET['lang']) ? '&lang=' . rawurlencode((string)$_GET['lang']) : '';
+      $prevUrl = '?page=' . ($page - 1) . $langQS;
+      $nextUrl = '?page=' . ($page + 1) . $langQS;
+    ?>
+      <nav class="pagination">
+        <?php if ($page > 1): ?>
+          <a class="pagination-link" href="<?= h($prevUrl) ?>">&larr; <?= he('donors.pagination.prev') ?></a>
+        <?php else: ?>
+          <span class="pagination-link disabled">&larr; <?= he('donors.pagination.prev') ?></span>
+        <?php endif; ?>
+
+        <span class="pagination-info"><?= he('donors.pagination.page_info', ['page' => (string)$page, 'pages' => (string)$totalPages]) ?></span>
+
+        <?php if ($page < $totalPages): ?>
+          <a class="pagination-link" href="<?= h($nextUrl) ?>"><?= he('donors.pagination.next') ?> &rarr;</a>
+        <?php else: ?>
+          <span class="pagination-link disabled"><?= he('donors.pagination.next') ?> &rarr;</span>
+        <?php endif; ?>
+      </nav>
+    <?php endif; ?>
   <?php endif; ?>
 
   <footer>

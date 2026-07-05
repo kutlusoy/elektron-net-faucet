@@ -1,0 +1,39 @@
+services:
+  db:
+    image: mariadb:11.4
+    container_name: elek-faucet-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${FAUCET_DB_NAME}
+      MYSQL_USER: ${FAUCET_DB_USER}
+      MYSQL_PASSWORD: ${FAUCET_DB_PASS}
+      MYSQL_ROOT_PASSWORD: ${FAUCET_DB_ROOT_PASS}
+    volumes:
+      - "./data/db:/var/lib/mysql"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    container_name: elek-faucet-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Lets the container reach an elektron-net node running natively on the
+    # same Windows host via http://host.docker.internal (see README).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file: .env
+    environment:
+      FAUCET_CONFIG: /config/config.php
+    ports:
+      - "127.0.0.1:${FAUCET_PORT}:80"
+    volumes:
+      # Persists config.php + .installed across `docker compose up -d --build`.
+      - "./data/config:/config"

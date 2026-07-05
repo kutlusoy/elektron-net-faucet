@@ -9,6 +9,7 @@ use ElektronFaucet\Captcha;
 use ElektronFaucet\Csrf;
 use ElektronFaucet\Stats;
 use ElektronFaucet\RateLimiter;
+use ElektronFaucet\Wallet;
 use ElektronFaucet\I18n;
 use ElektronFaucet\Flash;
 
@@ -27,6 +28,31 @@ $explorer    = $s['explorer_url'] ?? '';
 $totalSent   = RateLimiter::satToElek(Stats::totalSentSat());
 $locale      = I18n::locale();
 $faucetAddr  = trim((string)($s['sender_addr'] ?? ''));
+
+// The donations ledger is DB-backed (see Stats::syncDonations), so the
+// total is always available and unaffected by sender-address rotation or
+// the node's RPC scan window. Syncing fresh data is best-effort and
+// throttled — if it fails or is skipped, the total just reflects the last
+// successful sync instead of disappearing.
+if ($faucetAddr !== '') {
+    try {
+        Stats::syncDonations(Wallet::fromSettings()->rpc(), $faucetAddr);
+    } catch (\Throwable) {
+    }
+}
+$totalDonated = Stats::totalDonatedSat() / 100_000_000;
+
+// Best-effort, throttled balance check — must never break the public
+// homepage if the node is down. $walletBalanceSat stays null (banner
+// suppressed) until a successful read has ever been cached.
+$amountSat        = RateLimiter::elekToSat((string)$amount);
+$dailyBudgetSat   = RateLimiter::elekToSat((string)($s['daily_budget'] ?? '0'));
+$walletBalanceSat = null;
+try {
+    $walletBalanceSat = Stats::cachedWalletBalanceSat(Wallet::fromSettings()->rpc());
+} catch (\Throwable) {
+}
+$faucetEmpty = $amountSat > 0 && $walletBalanceSat !== null && $walletBalanceSat < $amountSat;
 
 // The flash payload may carry the txid behind a NUL separator so we can
 // render an explorer link on success without leaking it into the URL bar.
@@ -73,10 +99,40 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 
 <main class="card">
   <p class="lead"><?= h($message) ?></p>
-  <p class="amount">
-    <?= he('faucet.per_claim', ['amount' => h($amount)]) ?> &middot;
-    <?= he('faucet.total_given', ['amount' => h($totalSent)]) ?>
-  </p>
+  <p class="amount"><?= he('faucet.per_claim', ['amount' => h($amount)]) ?></p>
+
+  <div class="stats home-stats">
+    <div class="kpi kpi-wide">
+      <div class="label"><?= he('faucet.stats.balance_label') ?></div>
+      <div class="value"><?= $walletBalanceSat !== null ? h(RateLimiter::satToElek($walletBalanceSat)) . ' ELEK' : '—' ?></div>
+      <?php if ($walletBalanceSat !== null && $dailyBudgetSat > 0):
+        $runwayDays = intdiv($walletBalanceSat, $dailyBudgetSat);
+      ?>
+        <div class="sub">
+          <?= $runwayDays > 0
+                ? he('faucet.stats.runway', ['days' => $runwayDays])
+                : he('faucet.stats.runway_lt1') ?>
+        </div>
+      <?php endif; ?>
+    </div>
+    <div class="kpi">
+      <div class="label"><?= he('faucet.stats.given_label') ?></div>
+      <div class="value"><?= h($totalSent) ?> ELEK</div>
+    </div>
+    <div class="kpi">
+      <div class="label"><?= he('faucet.stats.donated_label') ?></div>
+      <div class="value"><?= h(number_format($totalDonated, 4)) ?> ELEK</div>
+    </div>
+  </div>
+
+  <?php if ($faucetEmpty): ?>
+    <div class="result warn">
+      <?= he('faucet.empty_notice') ?>
+      <?php if ($faucetAddr !== ''): ?>
+        <a href="#donate"><?= he('faucet.empty_notice_cta') ?></a>
+      <?php endif; ?>
+    </div>
+  <?php endif; ?>
 
   <?php if ($flash !== null): ?>
     <div class="result <?= $flash['ok'] ? 'ok' : 'err' ?>">
@@ -107,7 +163,7 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
 </main>
 
 <?php if ($faucetAddr !== ''): ?>
-<section class="card donate-section">
+<section class="card donate-section" id="donate">
   <h2><?= he('donate.title') ?></h2>
   <p class="lead"><?= he('donate.lead') ?></p>
 
