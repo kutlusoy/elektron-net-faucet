@@ -17,6 +17,7 @@ return [
     'err.captcha'               => 'Verifica captcha fallita.',
     'err.method'                => 'Metodo non consentito.',
     'err.disabled'              => 'Faucet disabilitato (importo è 0).',
+    'err.busy'                  => 'Server occupato, riprova tra un momento.',
     'err.payout_failed'         => 'Pagamento fallito. Riprova più tardi.',
     'err.cooldown_address'      => 'Questo indirizzo ha già richiesto nelle ultime {hours}h.',
     'err.cooldown_ip'           => 'Questo IP ha già richiesto nelle ultime {hours}h.',

@@ -17,6 +17,7 @@ return [
     'err.captcha'               => 'Captcha-Prüfung fehlgeschlagen.',
     'err.method'                => 'Methode nicht erlaubt.',
     'err.disabled'              => 'Faucet deaktiviert (Betrag ist 0).',
+    'err.busy'                  => 'Server ist ausgelastet, bitte gleich nochmal versuchen.',
     'err.payout_failed'         => 'Auszahlung fehlgeschlagen. Bitte später erneut versuchen.',
     'err.cooldown_address'      => 'Diese Adresse hat innerhalb der letzten {hours}h bereits eine Anfrage gestellt.',
     'err.cooldown_ip'           => 'Diese IP hat innerhalb der letzten {hours}h bereits eine Anfrage gestellt.',

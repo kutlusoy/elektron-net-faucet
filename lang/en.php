@@ -17,6 +17,7 @@ return [
     'err.captcha'               => 'Captcha verification failed.',
     'err.method'                => 'Method not allowed.',
     'err.disabled'              => 'Faucet is disabled (claim amount is 0).',
+    'err.busy'                  => 'Server is busy, please try again in a moment.',
     'err.payout_failed'         => 'Payout failed. Please try again later.',
     'err.cooldown_address'      => 'This address already claimed within the last {hours}h.',
     'err.cooldown_ip'           => 'This IP already claimed within the last {hours}h.',
