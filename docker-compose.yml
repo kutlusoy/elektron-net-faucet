@@ -11,7 +11,7 @@ services:
     volumes:
       - "./data/db:/var/lib/mysql"
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 5s
       timeout: 5s
       retries: 20
