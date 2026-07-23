@@ -43,6 +43,7 @@ return [
     'admin.pw_short'            => 'Password too short (min. 10 chars).',
     'admin.test_ok'             => 'Test successful:',
     'admin.test_failed'         => 'Test failed:',
+    'admin.bump_summary'        => 'Checked {checked} · fee-bumped {bumped} · confirmed {confirmed} · skipped {skipped}',
 
     'kpi.total_given'           => 'Total given',
     'kpi.payouts'               => '{count} payouts',
@@ -54,11 +55,12 @@ return [
     'kpi.rpc_error'             => 'RPC error: {error}',
 
     'sec.last_24h'              => 'Last 24h',
-    'sec.recent_claims'         => 'Recent 50 claims',
+    'sec.recent_claims'         => 'Recent claims',
     'sec.settings'              => 'Settings',
     'sec.faucet'                => 'Faucet',
     'sec.rpc'                   => 'Wallet RPC',
-    'sec.captcha'               => 'hCaptcha',
+    'sec.mempool'                => 'Mempool & Fee Bumping',
+    'sec.captcha'                => 'hCaptcha',
 
     'tbl.hour'                  => 'Hour',
     'tbl.payouts'               => 'Payouts',
@@ -90,6 +92,9 @@ return [
     'set.sender_addr'           => 'Faucet address (be1q… — shown in donation section)',
     'set.tls_verify'            => 'Verify TLS certificate (recommended)',
     'set.tls_verify_warn'       => '⚠ Disable only for nodes on a private network (VPN/SSH tunnel) or with a self-signed cert from your own CA.',
+    'set.fee_bump_interval'     => 'Stuck-transaction check interval (minutes)',
+    'set.fee_bump_interval_hint' => 'How often the faucet checks its own unconfirmed payouts and, if the network\'s current minimum fee has risen above what a transaction paid, RBF-bumps it to a higher fee so it can confirm. Runs automatically in the background; a saved change here takes effect on the next check, no restart needed.',
+    'set.bump_stuck_now'        => 'Check stuck transactions now',
     'set.captcha_site'          => 'Site key',
     'set.captcha_secret'        => 'Secret key (leave blank to keep)',
     'set.save'                  => 'Save settings',

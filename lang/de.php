@@ -43,6 +43,7 @@ return [
     'admin.pw_short'            => 'Passwort zu kurz (min. 10 Zeichen).',
     'admin.test_ok'             => 'Test erfolgreich:',
     'admin.test_failed'         => 'Test fehlgeschlagen:',
+    'admin.bump_summary'        => 'Geprüft: {checked} · gebumpt: {bumped} · bestätigt: {confirmed} · übersprungen: {skipped}',
 
     'kpi.total_given'           => 'Gesamt ausgezahlt',
     'kpi.payouts'               => '{count} Auszahlungen',
@@ -54,11 +55,12 @@ return [
     'kpi.rpc_error'             => 'RPC-Fehler: {error}',
 
     'sec.last_24h'              => 'Letzte 24 Stunden',
-    'sec.recent_claims'         => 'Letzte 50 Anfragen',
+    'sec.recent_claims'         => 'Anfragen',
     'sec.settings'              => 'Einstellungen',
     'sec.faucet'                => 'Faucet',
     'sec.rpc'                   => 'Wallet RPC',
-    'sec.captcha'               => 'hCaptcha',
+    'sec.mempool'                => 'Mempool & Fee-Bumping',
+    'sec.captcha'                => 'hCaptcha',
 
     'tbl.hour'                  => 'Stunde',
     'tbl.payouts'               => 'Auszahlungen',
@@ -90,6 +92,9 @@ return [
     'set.sender_addr'           => 'Faucet-Adresse (be1q… — wird im Spendenbereich angezeigt)',
     'set.tls_verify'            => 'TLS-Zertifikat prüfen (empfohlen)',
     'set.tls_verify_warn'       => '⚠ Nur für Nodes im privaten Netz (VPN/SSH-Tunnel) oder mit selbst signiertem Zertifikat deaktivieren.',
+    'set.fee_bump_interval'     => 'Prüfintervall für steckengebliebene Transaktionen (Minuten)',
+    'set.fee_bump_interval_hint' => 'Wie oft der Faucet seine eigenen unbestätigten Auszahlungen prüft und sie per RBF auf eine höhere Gebühr anhebt, falls die aktuelle Mindestgebühr im Netzwerk über der ursprünglich gezahlten liegt. Läuft automatisch im Hintergrund; eine gespeicherte Änderung wirkt ab der nächsten Prüfung, kein Neustart nötig.',
+    'set.bump_stuck_now'        => 'Steckengebliebene Transaktionen jetzt prüfen',
     'set.captcha_site'          => 'Site-Key',
     'set.captcha_secret'        => 'Secret-Key (leer lassen = beibehalten)',
     'set.save'                  => 'Einstellungen speichern',

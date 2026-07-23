@@ -89,23 +89,27 @@ if ($adminUser === null || $adminPass === null || strlen($adminPass) < 10) {
 Installer::createAdmin($adminUser, $adminPass);
 
 Installer::seedDefaultSettings([
-    'faucet_title'        => envOrNull('FAUCET_TITLE') ?? 'Elektron Net Faucet',
-    'faucet_message'      => envOrNull('FAUCET_MESSAGE') ?? 'Claim some free ELEK!',
-    'amount_elek'         => envOrNull('FAUCET_AMOUNT_ELEK') ?? '0.001',
-    'daily_budget'        => envOrNull('FAUCET_DAILY_BUDGET') ?? '1',
-    'hourly_budget'       => envOrNull('FAUCET_HOURLY_BUDGET') ?? '0.1',
-    'per_addr_cooldown_h' => envOrNull('FAUCET_PER_ADDR_COOLDOWN_H') ?? '24',
-    'per_ip_cooldown_h'   => envOrNull('FAUCET_PER_IP_COOLDOWN_H') ?? '1',
-    'default_lang'        => envOrNull('FAUCET_DEFAULT_LANG') ?? 'en',
-    'rpc_host'            => envOrNull('FAUCET_RPC_HOST') ?? '127.0.0.1',
-    'rpc_port'            => envOrNull('FAUCET_RPC_PORT') ?? '8332',
-    'rpc_user'            => envOrNull('FAUCET_RPC_USER') ?? '',
-    'wallet_name'         => envOrNull('FAUCET_WALLET_NAME') ?? '',
-    'sender_addr'         => envOrNull('FAUCET_SENDER_ADDR') ?? '',
-    'explorer_url'        => envOrNull('FAUCET_EXPLORER_URL') ?? '',
-    'hcaptcha_site'       => envOrNull('FAUCET_HCAPTCHA_SITE') ?? '',
-    'rpc_tls_verify'      => envOrNull('FAUCET_RPC_TLS_VERIFY') ?? '1',
-    'rpc_tls_verify_host' => envOrNull('FAUCET_RPC_TLS_VERIFY_HOST') ?? '0',
+    'faucet_title'          => envOrNull('FAUCET_TITLE') ?? 'Elektron Net Faucet',
+    'faucet_message'        => envOrNull('FAUCET_MESSAGE') ?? 'Claim some free ELEK!',
+    'amount_elek'           => envOrNull('FAUCET_AMOUNT_ELEK') ?? '0.001',
+    'daily_budget'          => envOrNull('FAUCET_DAILY_BUDGET') ?? '1',
+    'hourly_budget'         => envOrNull('FAUCET_HOURLY_BUDGET') ?? '0.1',
+    'per_addr_cooldown_h'   => envOrNull('FAUCET_PER_ADDR_COOLDOWN_H') ?? '24',
+    'per_ip_cooldown_h'     => envOrNull('FAUCET_PER_IP_COOLDOWN_H') ?? '1',
+    'default_lang'          => envOrNull('FAUCET_DEFAULT_LANG') ?? 'en',
+    'rpc_host'              => envOrNull('FAUCET_RPC_HOST') ?? '127.0.0.1',
+    'rpc_port'              => envOrNull('FAUCET_RPC_PORT') ?? '8332',
+    'rpc_user'              => envOrNull('FAUCET_RPC_USER') ?? '',
+    'wallet_name'           => envOrNull('FAUCET_WALLET_NAME') ?? '',
+    'sender_addr'           => envOrNull('FAUCET_SENDER_ADDR') ?? '',
+    'explorer_url'          => envOrNull('FAUCET_EXPLORER_URL') ?? '',
+    'hcaptcha_site'         => envOrNull('FAUCET_HCAPTCHA_SITE') ?? '',
+    'rpc_tls_verify'        => envOrNull('FAUCET_RPC_TLS_VERIFY') ?? '1',
+    'rpc_tls_verify_host'   => envOrNull('FAUCET_RPC_TLS_VERIFY_HOST') ?? '0',
+    // How often (minutes) the background loop in docker/entrypoint.sh
+    // checks the faucet's own unconfirmed payouts and RBF fee-bumps them.
+    // Also editable later in Admin Panel -> Mempool & Fee Bumping.
+    'fee_bump_interval_min' => envOrNull('FAUCET_FEE_BUMP_INTERVAL_MIN') ?? '10',
 ]);
 
 // Secrets go through the exact same Crypto::encrypt() call admin.php makes,

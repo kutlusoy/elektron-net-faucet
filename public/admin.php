@@ -11,6 +11,7 @@ use ElektronFaucet\Crypto;
 use ElektronFaucet\Stats;
 use ElektronFaucet\RateLimiter;
 use ElektronFaucet\Wallet;
+use ElektronFaucet\FeeBumper;
 use ElektronFaucet\Logger;
 use ElektronFaucet\I18n;
 use ElektronFaucet\Flash;
@@ -98,7 +99,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'faucet_title','faucet_message','amount_elek','daily_budget','hourly_budget',
             'per_addr_cooldown_h','per_ip_cooldown_h','default_lang',
             'rpc_host','rpc_port','rpc_user','wallet_name','sender_addr',
-            'hcaptcha_site','explorer_url',
+            'hcaptcha_site','explorer_url','fee_bump_interval_min',
         ];
         foreach ($fields as $f) {
             if (array_key_exists($f, $_POST)) Db::setSetting($f, trim((string)$_POST[$f]));
@@ -150,6 +151,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         exit;
     }
 
+    if ($action === 'bump_stuck') {
+        try {
+            // minAgeMinutes=0: a manual click means "check everything
+            // that's unconfirmed right now", not just the ones old enough
+            // to pass the cron's own age gate.
+            $summary = FeeBumper::sweepStuckClaims(Wallet::fromSettings(), 0);
+            Logger::audit($adminId, 'bump_stuck_manual', $summary);
+            Flash::set(true, __('admin.bump_summary', [
+                'checked'   => (string)$summary['checked'],
+                'bumped'    => (string)$summary['bumped'],
+                'confirmed' => (string)$summary['confirmed'],
+                'skipped'   => (string)$summary['skipped'],
+            ]));
+        } catch (\Throwable $e) {
+            Flash::set(false, __('admin.test_failed') . ' ' . $e->getMessage());
+        }
+        header('Location: admin.php');
+        exit;
+    }
+
     // Unknown action — just redirect home.
     header('Location: admin.php');
     exit;
@@ -167,7 +188,15 @@ $walletBalance = null; $walletError = null;
 try { $walletBalance = Wallet::fromSettings()->getBalance(); }
 catch (\Throwable $e) { $walletError = $e->getMessage(); }
 
-$claims    = Stats::recentClaims(50);
+// Recent claims — 10 per page instead of one long unpaginated list.
+$claimsPerPage = 10;
+$claimsTotal   = Stats::countClaims();
+$claimsPages   = max(1, (int)ceil($claimsTotal / $claimsPerPage));
+$claimsPage    = (int)($_GET['page'] ?? 1);
+if ($claimsPage < 1) $claimsPage = 1;
+if ($claimsPage > $claimsPages) $claimsPage = $claimsPages;
+$claims = Stats::recentClaims($claimsPerPage, ($claimsPage - 1) * $claimsPerPage);
+
 $histogram = Stats::last24hHistogram();
 $explorer  = $s['explorer_url'] ?? '';
 
@@ -241,6 +270,13 @@ $flash = Flash::take();
 
 <section>
   <h2><?= he('sec.recent_claims') ?></h2>
+
+  <form method="post" action="admin.php" class="action-form">
+    <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
+    <input type="hidden" name="action" value="bump_stuck">
+    <div class="form-actions right"><button type="submit"><?= he('set.bump_stuck_now') ?></button></div>
+  </form>
+
   <div class="table-scroll">
     <table>
       <thead><tr>
@@ -267,9 +303,32 @@ $flash = Flash::take();
           </td>
         </tr>
         <?php endforeach; ?>
+        <?php if (empty($claims)): ?><tr><td colspan="6"><?= he('tbl.no_data') ?></td></tr><?php endif; ?>
       </tbody>
     </table>
   </div>
+
+  <?php if ($claimsPages > 1):
+    $langQS  = isset($_GET['lang']) ? '&lang=' . rawurlencode((string)$_GET['lang']) : '';
+    $prevUrl = '?page=' . ($claimsPage - 1) . $langQS;
+    $nextUrl = '?page=' . ($claimsPage + 1) . $langQS;
+  ?>
+    <nav class="pagination">
+      <?php if ($claimsPage > 1): ?>
+        <a class="pagination-link" href="<?= h($prevUrl) ?>">&larr; <?= he('donors.pagination.prev') ?></a>
+      <?php else: ?>
+        <span class="pagination-link disabled">&larr; <?= he('donors.pagination.prev') ?></span>
+      <?php endif; ?>
+
+      <span class="pagination-info"><?= he('donors.pagination.page_info', ['page' => (string)$claimsPage, 'pages' => (string)$claimsPages]) ?></span>
+
+      <?php if ($claimsPage < $claimsPages): ?>
+        <a class="pagination-link" href="<?= h($nextUrl) ?>"><?= he('donors.pagination.next') ?> &rarr;</a>
+      <?php else: ?>
+        <span class="pagination-link disabled"><?= he('donors.pagination.next') ?> &rarr;</span>
+      <?php endif; ?>
+    </nav>
+  <?php endif; ?>
 </section>
 
 <section>
@@ -310,6 +369,13 @@ $flash = Flash::take();
         <?= he('set.tls_verify') ?>
       </label>
       <p class="hint warn"><?= he('set.tls_verify_warn') ?></p>
+    </fieldset>
+
+    <fieldset><legend><?= he('sec.mempool') ?></legend>
+      <label><?= he('set.fee_bump_interval') ?>
+        <input type="number" name="fee_bump_interval_min" min="1" value="<?= h($s['fee_bump_interval_min'] ?? '10') ?>">
+      </label>
+      <p class="hint"><?= he('set.fee_bump_interval_hint') ?></p>
     </fieldset>
 
     <fieldset><legend><?= he('sec.captcha') ?></legend>
