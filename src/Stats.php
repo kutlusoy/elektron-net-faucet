@@ -56,15 +56,21 @@ final class Stats
         return $out;
     }
 
+    public static function countClaims(): int
+    {
+        return (int)Db::fetchValue('SELECT COUNT(*) FROM claims');
+    }
+
     /**
      * @return array<int,array<string,mixed>>
      */
-    public static function recentClaims(int $limit = 50): array
+    public static function recentClaims(int $limit = 50, int $offset = 0): array
     {
-        $limit = max(1, min(500, $limit));
+        $limit  = max(1, min(500, $limit));
+        $offset = max(0, $offset);
         return Db::fetchAll(
             "SELECT id, address, amount_satoshi, txid, status, created_at, sent_at, error
-             FROM claims ORDER BY id DESC LIMIT $limit"
+             FROM claims ORDER BY id DESC LIMIT $limit OFFSET $offset"
         );
     }
 
