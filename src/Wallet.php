@@ -117,24 +117,54 @@ final class Wallet
      * above). Requires the original tx to have been sent with
      * replaceable=true -- true for every payout since this fix; payouts
      * sent before it will fail here with "Transaction is not BIP 125
-     * replaceable". Returns the new txid.
+     * replaceable". Also fails outright (by design, not caught here) if the
+     * transaction already has a descendant in the wallet -- Core refuses to
+     * bump those; see FeeBumper for why that's fine to just skip. Returns
+     * the new txid.
      */
     public function bumpFee(string $txid, ?float $feeRateSatsPerVb = null): string
     {
         $feeRate = $feeRateSatsPerVb ?? $this->currentFallbackFeeRateSatsPerVb();
         return $this->withUnlockedWallet(function () use ($txid, $feeRate) {
-            $result = $this->rpc->call('bumpfee', [$txid, ['fee_rate' => $feeRate]]);
-            if (!is_array($result) || empty($result['txid'])) {
-                // A watch-only/PSBT-only wallet would return a 'psbt' to
-                // sign manually instead of a broadcast txid -- our hot
-                // wallet always holds the private key, so treat anything
-                // else as an error rather than pretending it succeeded.
-                throw new \RuntimeException(
-                    'bumpfee did not return a broadcast txid: ' . json_encode($result)
-                );
-            }
-            return (string)$result['txid'];
+            return $this->callBumpFee($txid, $feeRate);
         });
+    }
+
+    private function callBumpFee(string $txid, float $feeRateSatsPerVb): string
+    {
+        try {
+            $result = $this->rpc->call('bumpfee', [$txid, ['fee_rate' => $feeRateSatsPerVb]]);
+        } catch (RpcException $e) {
+            // BIP125 rule 4: the replacement must pay the old fee plus at
+            // least the incremental relay fee -- our own fee_rate can land
+            // right back at (or below) that boundary on a quiet chain where
+            // mempoolminfee is near zero. Core states the exact minimum
+            // total fee it requires right in the error text, so reuse that
+            // number directly (with a margin so the retry doesn't land on
+            // the boundary again either) instead of re-deriving
+            // incrementalrelayfee ourselves, and retry once.
+            if (!preg_match('/must be at least ([0-9.]+)/', $e->getMessage(), $m)) {
+                throw $e;
+            }
+            $entry = $this->getMempoolEntry($txid);
+            $vsize = (int)($entry['vsize'] ?? 0);
+            if ($vsize <= 0) {
+                throw $e;
+            }
+            $requiredSat = (int)ceil(((float)$m[1]) * 100_000_000 * 1.1);
+            $retryRate   = max($feeRateSatsPerVb, $requiredSat / $vsize);
+            $result = $this->rpc->call('bumpfee', [$txid, ['fee_rate' => $retryRate]]);
+        }
+        if (!is_array($result) || empty($result['txid'])) {
+            // A watch-only/PSBT-only wallet would return a 'psbt' to
+            // sign manually instead of a broadcast txid -- our hot
+            // wallet always holds the private key, so treat anything
+            // else as an error rather than pretending it succeeded.
+            throw new \RuntimeException(
+                'bumpfee did not return a broadcast txid: ' . json_encode($result)
+            );
+        }
+        return (string)$result['txid'];
     }
 
     /**
@@ -146,6 +176,24 @@ final class Wallet
         try {
             $tx = $this->rpc->call('gettransaction', [$txid]);
             return is_array($tx) ? (int)($tx['confirmations'] ?? 0) : null;
+        } catch (RpcException) {
+            return null;
+        }
+    }
+
+    /**
+     * Live mempool view of a transaction's own size/fee plus its unconfirmed
+     * ancestor package totals (vsize/fee summed over itself and everything
+     * it still depends on) -- used by FeeBumper to size a bump for the
+     * whole package (CPFP-style) instead of just this transaction's own
+     * small vsize. Null if the node no longer has it in mempool (already
+     * confirmed, or evicted).
+     */
+    public function getMempoolEntry(string $txid): ?array
+    {
+        try {
+            $entry = $this->rpc->call('getmempoolentry', [$txid]);
+            return is_array($entry) ? $entry : null;
         } catch (RpcException) {
             return null;
         }
