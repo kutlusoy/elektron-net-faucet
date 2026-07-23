@@ -132,6 +132,12 @@ final class Wallet
 
     private function callBumpFee(string $txid, float $feeRateSatsPerVb): string
     {
+        // Round UP (never down, so we never drop back below what the caller
+        // actually wanted) to 3 decimals. A raw division result (e.g. from
+        // FeeBumper's CPFP package sizing) can carry a dozen+ significant
+        // digits, and core's fee_rate amount parser rejects that outright
+        // with "Invalid amount" -- observed live against this fork.
+        $feeRateSatsPerVb = self::roundFeeRateUp($feeRateSatsPerVb);
         try {
             $result = $this->rpc->call('bumpfee', [$txid, ['fee_rate' => $feeRateSatsPerVb]]);
         } catch (RpcException $e) {
@@ -152,7 +158,7 @@ final class Wallet
                 throw $e;
             }
             $requiredSat = (int)ceil(((float)$m[1]) * 100_000_000 * 1.1);
-            $retryRate   = max($feeRateSatsPerVb, $requiredSat / $vsize);
+            $retryRate   = self::roundFeeRateUp(max($feeRateSatsPerVb, $requiredSat / $vsize));
             $result = $this->rpc->call('bumpfee', [$txid, ['fee_rate' => $retryRate]]);
         }
         if (!is_array($result) || empty($result['txid'])) {
@@ -165,6 +171,11 @@ final class Wallet
             );
         }
         return (string)$result['txid'];
+    }
+
+    private static function roundFeeRateUp(float $rate): float
+    {
+        return ceil($rate * 1000) / 1000;
     }
 
     /**
