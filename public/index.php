@@ -25,7 +25,6 @@ $captchaSite = Captcha::siteKey();
 $captchaOn   = Captcha::isEnabled();
 $csrf        = Csrf::token();
 $explorer    = $s['explorer_url'] ?? '';
-$totalSent   = RateLimiter::satToElek(Stats::totalSentSat());
 $locale      = I18n::locale();
 $faucetAddr  = trim((string)($s['sender_addr'] ?? ''));
 
@@ -43,13 +42,16 @@ if ($faucetAddr !== '') {
 $totalDonated = Stats::totalDonatedSat() / 100_000_000;
 
 // Best-effort, throttled balance check — must never break the public
-// homepage if the node is down. $walletBalanceSat stays null (banner
-// suppressed) until a successful read has ever been cached.
+// homepage if the node is down. $walletBalanceSat/$totalSentSat stay null
+// (banner/figure suppressed) until a successful read has ever been cached.
 $amountSat        = RateLimiter::elekToSat((string)$amount);
 $dailyBudgetSat   = RateLimiter::elekToSat((string)($s['daily_budget'] ?? '0'));
 $walletBalanceSat = null;
+$totalSentSat     = null;
 try {
-    $walletBalanceSat = Stats::cachedWalletBalanceSat(Wallet::fromSettings()->rpc());
+    $wallet           = Wallet::fromSettings();
+    $walletBalanceSat = Stats::cachedWalletBalanceSat($wallet->rpc());
+    $totalSentSat     = Stats::cachedTotalSentSat($wallet);
 } catch (\Throwable) {
 }
 $faucetEmpty = $amountSat > 0 && $walletBalanceSat !== null && $walletBalanceSat < $amountSat;
@@ -117,7 +119,7 @@ function h(?string $v): string { return htmlspecialchars((string)$v, ENT_QUOTES,
     </div>
     <div class="kpi">
       <div class="label"><?= he('faucet.stats.given_label') ?></div>
-      <div class="value"><?= h($totalSent) ?> ELEK</div>
+      <div class="value"><?= $totalSentSat !== null ? h(RateLimiter::satToElek($totalSentSat)) . ' ELEK' : '—' ?></div>
     </div>
     <div class="kpi">
       <div class="label"><?= he('faucet.stats.donated_label') ?></div>

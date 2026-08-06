@@ -350,8 +350,12 @@ account you just created. In **Settings**, fill in three blocks and click
 - *Amount per claim* — e.g. `0.001` ELEK. Start small.
 - *Daily / hourly budget* — caps in a rolling 24h / 1h window. `0` =
   unlimited (not recommended on mainnet).
-- *Cooldown per address* — e.g. `24` (hours). One claim per address per
-  day.
+- *Unconfirmed-payout guard per address* — e.g. `30` (minutes). An address
+  with a payout still pending confirmation can't claim again until it clears
+  this window. Whether an address is eligible at all is decided live against
+  the chain (`scantxoutset`): any address that currently holds an on-chain
+  balance, from any source, is rejected outright — this setting only covers
+  the short gap before a just-broadcast payout is confirmed.
 - *Cooldown per IP* — e.g. `1` (hour). Soft anti-spam.
 - *Explorer URL prefix* — e.g. `https://explorer.example/tx/`. The txid is
   appended so successful claims show a clickable link.
@@ -997,9 +1001,9 @@ table and are edited through the admin panel. Sensitive ones
 | Setting                | Meaning                                                                 |
 |------------------------|-------------------------------------------------------------------------|
 | `amount_elek`          | Amount per successful claim, in ELEK (e.g. `0.001`).                    |
-| `daily_budget`         | Maximum ELEK distributed in any rolling 24h window. `0` = unlimited.    |
-| `hourly_budget`        | Maximum ELEK distributed in any rolling 1h window. `0` = unlimited.     |
-| `per_addr_cooldown_h`  | An address can only claim once every N hours.                           |
+| `daily_budget`         | Maximum ELEK distributed in any rolling 24h window, checked live against the wallet's own send history. `0` = unlimited. |
+| `hourly_budget`        | Maximum ELEK distributed in any rolling 1h window, checked live against the wallet's own send history. `0` = unlimited. |
+| `pending_guard_min`    | An address with a still-unconfirmed payout can't claim again for N minutes. Address eligibility itself is decided live on-chain (`scantxoutset`), not by this setting. |
 | `per_ip_cooldown_h`    | An IP can only claim once every N hours.                                |
 | `default_lang`         | Fallback locale when the user hasn't picked one and no `Accept-Language` match. |
 | `explorer_url`         | URL prefix; the txid is appended for the success link in the frontend.  |

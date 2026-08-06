@@ -94,7 +94,7 @@ Installer::seedDefaultSettings([
     'amount_elek'           => envOrNull('FAUCET_AMOUNT_ELEK') ?? '0.001',
     'daily_budget'          => envOrNull('FAUCET_DAILY_BUDGET') ?? '1',
     'hourly_budget'         => envOrNull('FAUCET_HOURLY_BUDGET') ?? '0.1',
-    'per_addr_cooldown_h'   => envOrNull('FAUCET_PER_ADDR_COOLDOWN_H') ?? '24',
+    'pending_guard_min'     => envOrNull('FAUCET_PENDING_GUARD_MIN') ?? '30',
     'per_ip_cooldown_h'     => envOrNull('FAUCET_PER_IP_COOLDOWN_H') ?? '1',
     'default_lang'          => envOrNull('FAUCET_DEFAULT_LANG') ?? 'en',
     'rpc_host'              => envOrNull('FAUCET_RPC_HOST') ?? '127.0.0.1',

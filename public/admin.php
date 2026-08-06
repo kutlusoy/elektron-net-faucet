@@ -97,7 +97,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     if ($action === 'save_settings') {
         $fields = [
             'faucet_title','faucet_message','amount_elek','daily_budget','hourly_budget',
-            'per_addr_cooldown_h','per_ip_cooldown_h','default_lang',
+            'pending_guard_min','per_ip_cooldown_h','default_lang',
             'rpc_host','rpc_port','rpc_user','wallet_name','sender_addr',
             'hcaptcha_site','explorer_url','fee_bump_interval_min',
         ];
@@ -177,20 +177,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $csrf            = Csrf::token();
-$totalSentSat    = Stats::totalSentSat();
 $totalCount      = Stats::totalSentCount();
-$dailySat        = Stats::spentLastDaySat();
-$hourlySat       = Stats::spentLastHourSat();
 $dailyBudgetSat  = RateLimiter::elekToSat($s['daily_budget']  ?? '0');
 $hourlyBudgetSat = RateLimiter::elekToSat($s['hourly_budget'] ?? '0');
 
+// Balance, total given, today's/this hour's spend all come from the same
+// live wallet read now, instead of mixing this app's `claims` bookkeeping
+// with the node's real transaction history -- see Wallet::getSentSatSince().
 $walletBalance = null; $walletError = null;
-try { $walletBalance = Wallet::fromSettings()->getBalance(); }
-catch (\Throwable $e) { $walletError = $e->getMessage(); }
+$totalSentSat = null; $dailySat = null; $hourlySat = null;
+try {
+    $wallet        = Wallet::fromSettings();
+    $walletBalance = $wallet->getBalance();
+    $totalSentSat  = Stats::cachedTotalSentSat($wallet);
+    $dailySat      = $wallet->getSentSatSince(time() - 86400);
+    $hourlySat     = $wallet->getSentSatSince(time() - 3600);
+} catch (\Throwable $e) { $walletError = $e->getMessage(); }
 
-// Recent claims — 10 per page instead of one long unpaginated list.
+// Recent claims — 10 per page, capped at the last 50 total.
 $claimsPerPage = 10;
-$claimsTotal   = Stats::countClaims();
+$claimsTotal   = min(50, Stats::countClaims());
 $claimsPages   = max(1, (int)ceil($claimsTotal / $claimsPerPage));
 $claimsPage    = (int)($_GET['page'] ?? 1);
 if ($claimsPage < 1) $claimsPage = 1;
@@ -235,18 +241,18 @@ $flash = Flash::take();
 <div class="stats">
   <div class="kpi">
     <div class="label"><?= he('kpi.total_given') ?></div>
-    <div class="value"><?= h(RateLimiter::satToElek($totalSentSat)) ?> ELEK</div>
+    <div class="value"><?= $totalSentSat !== null ? h(RateLimiter::satToElek($totalSentSat)) . ' ELEK' : '&mdash;' ?></div>
     <div class="sub"><?= he('kpi.payouts', ['count' => $totalCount]) ?></div>
   </div>
   <div class="kpi">
     <div class="label"><?= he('kpi.today') ?></div>
-    <div class="value"><?= h(RateLimiter::satToElek($dailySat)) ?> ELEK</div>
-    <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($dailyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$dailyBudgetSat-$dailySat)))]) ?></div>
+    <div class="value"><?= $dailySat !== null ? h(RateLimiter::satToElek($dailySat)) . ' ELEK' : '&mdash;' ?></div>
+    <div class="sub"><?= $dailySat !== null ? he('kpi.budget', ['budget' => h(RateLimiter::satToElek($dailyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$dailyBudgetSat-$dailySat)))]) : '' ?></div>
   </div>
   <div class="kpi">
     <div class="label"><?= he('kpi.this_hour') ?></div>
-    <div class="value"><?= h(RateLimiter::satToElek($hourlySat)) ?> ELEK</div>
-    <div class="sub"><?= he('kpi.budget', ['budget' => h(RateLimiter::satToElek($hourlyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$hourlyBudgetSat-$hourlySat)))]) ?></div>
+    <div class="value"><?= $hourlySat !== null ? h(RateLimiter::satToElek($hourlySat)) . ' ELEK' : '&mdash;' ?></div>
+    <div class="sub"><?= $hourlySat !== null ? he('kpi.budget', ['budget' => h(RateLimiter::satToElek($hourlyBudgetSat)), 'remaining' => h(RateLimiter::satToElek(max(0,$hourlyBudgetSat-$hourlySat)))]) : '' ?></div>
   </div>
   <div class="kpi">
     <div class="label"><?= he('kpi.wallet_balance') ?></div>
@@ -343,7 +349,7 @@ $flash = Flash::take();
       <label><?= he('set.amount_per_claim') ?><input type="text" name="amount_elek" value="<?= h($s['amount_elek'] ?? '0.001') ?>" required></label>
       <label><?= he('set.daily_budget') ?><input type="text" name="daily_budget" value="<?= h($s['daily_budget'] ?? '0') ?>"></label>
       <label><?= he('set.hourly_budget') ?><input type="text" name="hourly_budget" value="<?= h($s['hourly_budget'] ?? '0') ?>"></label>
-      <label><?= he('set.addr_cooldown') ?><input type="number" name="per_addr_cooldown_h" min="0" value="<?= h($s['per_addr_cooldown_h'] ?? '24') ?>"></label>
+      <label><?= he('set.pending_guard') ?><input type="number" name="pending_guard_min" min="0" value="<?= h($s['pending_guard_min'] ?? '30') ?>"></label>
       <label><?= he('set.ip_cooldown') ?><input type="number" name="per_ip_cooldown_h" min="0" value="<?= h($s['per_ip_cooldown_h'] ?? '1') ?>"></label>
       <label><?= he('set.explorer_url') ?><input type="text" name="explorer_url" value="<?= h($s['explorer_url'] ?? '') ?>"></label>
       <label><?= he('set.default_lang') ?>

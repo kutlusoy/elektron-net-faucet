@@ -72,6 +72,21 @@ final class Db
         );
     }
 
+    /**
+     * Seeds $key with $value only if it doesn't already exist -- unlike
+     * setSetting(), never overwrites a value an operator (or a previous
+     * install) already set. Used by migrate() to give existing
+     * installations a sane default for a newly introduced setting without
+     * touching anything they've already configured.
+     */
+    public static function setSettingIfMissing(string $key, string $value): void
+    {
+        self::exec(
+            'INSERT IGNORE INTO settings (`key`, `value`) VALUES (?, ?)',
+            [$key, $value]
+        );
+    }
+
     public static function getSetting(string $key, ?string $default = null): ?string
     {
         $v = self::fetchValue('SELECT `value` FROM settings WHERE `key` = ?', [$key]);
@@ -178,6 +193,13 @@ final class Db
         foreach ($statements as $sql) {
             $pdo->exec($sql);
         }
+
+        // Existing installs pick up new settings introduced after their
+        // initial install here, without ever overwriting a value already
+        // set -- the same "safe to run on every request" idempotency as
+        // the CREATE TABLE statements above, just for settings rows instead
+        // of tables.
+        self::setSettingIfMissing('pending_guard_min', '30');
     }
 
 }

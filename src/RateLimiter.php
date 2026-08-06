@@ -5,25 +5,50 @@ namespace ElektronFaucet;
 
 final class RateLimiter
 {
-    public static function check(string $address, string $ip): ?string
+    // Fixed fee headroom required on top of the claim amount when checking
+    // the faucet's own live balance -- large enough for a single standard
+    // payout transaction's fee at any realistic fee rate, small enough to
+    // never meaningfully affect payout eligibility.
+    private const OWN_BALANCE_FEE_BUFFER_SAT = 10_000;
+
+    /**
+     * Decides whether $address may claim right now. Everything that can be
+     * verified against the chain is -- address balance, the faucet's own
+     * solvency, and spend budgets all come from live node RPC via $wallet,
+     * not from this app's own bookkeeping. The database is only consulted
+     * for two things no blockchain can answer: per-IP cooldown (IP isn't
+     * on-chain data), and a short guard against double-claiming the same
+     * address while its first payout is still unconfirmed (scantxoutset
+     * only sees the confirmed UTXO set, so a just-broadcast payout is
+     * briefly invisible on-chain).
+     */
+    public static function check(string $address, string $ip, Wallet $wallet): ?string
     {
         $s = Db::getAllSettings();
-        $perAddrHours = (int)($s['per_addr_cooldown_h'] ?? 24);
-        $perIpHours   = (int)($s['per_ip_cooldown_h'] ?? 1);
+        $pendingGuardMin = (int)($s['pending_guard_min'] ?? 30);
+        $perIpHours      = (int)($s['per_ip_cooldown_h'] ?? 1);
 
         $ipBin = self::ipToBin($ip);
 
-        if ($perAddrHours > 0) {
+        if ($pendingGuardMin > 0) {
             $last = Db::fetchValue(
                 "SELECT created_at FROM claims
-                 WHERE address = ? AND status <> 'failed'
-                   AND created_at > DATE_SUB(NOW(), INTERVAL ? HOUR)
+                 WHERE address = ? AND status IN ('pending','sent')
+                   AND created_at > DATE_SUB(NOW(), INTERVAL ? MINUTE)
                  ORDER BY id DESC LIMIT 1",
-                [$address, $perAddrHours]
+                [$address, $pendingGuardMin]
             );
             if ($last !== null) {
-                return I18n::t('err.cooldown_address', ['hours' => $perAddrHours]);
+                return I18n::t('err.pending_guard', ['minutes' => $pendingGuardMin]);
             }
+        }
+
+        try {
+            if ($wallet->addressHasOnChainBalance($address)) {
+                return I18n::t('err.address_funded');
+            }
+        } catch (\Throwable) {
+            return I18n::t('err.busy');
         }
 
         if ($perIpHours > 0) {
@@ -41,13 +66,28 @@ final class RateLimiter
 
         $amountSat = self::elekToSat((string)($s['amount_elek'] ?? '0'));
 
+        // amountSat === 0 means the faucet is disabled -- public/api.php
+        // reports that specifically right after check() returns null, so
+        // skip the solvency check rather than misreport a healthy-but-small
+        // balance as "insufficient funds".
+        if ($amountSat > 0) {
+            try {
+                $ownBalanceSat = self::elekToSat($wallet->getBalance());
+            } catch (\Throwable) {
+                return I18n::t('err.busy');
+            }
+            if ($amountSat + self::OWN_BALANCE_FEE_BUFFER_SAT > $ownBalanceSat) {
+                return I18n::t('err.insufficient_funds');
+            }
+        }
+
         $hourBudgetSat = self::elekToSat((string)($s['hourly_budget'] ?? '0'));
         if ($hourBudgetSat > 0) {
-            $spent = (int)Db::fetchValue(
-                "SELECT COALESCE(SUM(amount_satoshi),0) FROM claims
-                 WHERE status <> 'failed'
-                   AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)"
-            );
+            try {
+                $spent = $wallet->getSentSatSince(time() - 3600);
+            } catch (\Throwable) {
+                return I18n::t('err.busy');
+            }
             if ($spent + $amountSat > $hourBudgetSat) {
                 return I18n::t('err.hourly_exhausted');
             }
@@ -55,11 +95,11 @@ final class RateLimiter
 
         $dayBudgetSat = self::elekToSat((string)($s['daily_budget'] ?? '0'));
         if ($dayBudgetSat > 0) {
-            $spent = (int)Db::fetchValue(
-                "SELECT COALESCE(SUM(amount_satoshi),0) FROM claims
-                 WHERE status <> 'failed'
-                   AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)"
-            );
+            try {
+                $spent = $wallet->getSentSatSince(time() - 86400);
+            } catch (\Throwable) {
+                return I18n::t('err.busy');
+            }
             if ($spent + $amountSat > $dayBudgetSat) {
                 return I18n::t('err.daily_exhausted');
             }

@@ -22,6 +22,11 @@ final class Wallet
     // the mempool fills up and mempoolminfee rises above it.
     private const FEE_RATE_MARGIN = 1.25;
 
+    // Hard cap on getSentSatSince()'s listtransactions paging (100/page ->
+    // 50,000 transactions) so a misbehaving node can't turn an all-time
+    // scan into an unbounded loop.
+    private const MAX_LISTTRANSACTIONS_PAGES = 500;
+
     public function __construct(private RpcClient $rpc) {}
 
     public static function fromSettings(): self
@@ -250,5 +255,93 @@ final class Wallet
     {
         $info = $this->rpc->call('getwalletinfo', []);
         return is_array($info) ? $info : [];
+    }
+
+    /**
+     * True if $address currently holds any confirmed on-chain balance,
+     * checked live against the node's UTXO set via `scantxoutset` -- no
+     * wallet import, no rescan, works for any valid address regardless of
+     * whether this wallet has ever seen it before. This is the real
+     * anti-abuse check: it catches an address that already has funds from
+     * *any* source (a previous claim, an external deposit, ...), not just
+     * ones this app happens to remember sending to.
+     */
+    public function addressHasOnChainBalance(string $address): bool
+    {
+        // Defensive: only bech32-charset characters can reach the
+        // descriptor string below, regardless of what already validated
+        // the address upstream.
+        if (!preg_match('/^[a-z0-9]{1,90}$/i', $address)) {
+            throw new \InvalidArgumentException('address contains characters not valid for a descriptor');
+        }
+        $result = $this->scanTxOutSetWithRetry(['addr(' . $address . ')']);
+        return (float)($result['total_amount'] ?? 0) > 0.0;
+    }
+
+    /**
+     * `scantxoutset` can fail with "Scan already in progress" (-8) if
+     * another scan is already running against this node -- only one scan
+     * runs at a time. A couple of short retries absorb that without making
+     * the caller treat a temporarily busy node as "address is clean".
+     */
+    private function scanTxOutSetWithRetry(array $descriptors, int $maxAttempts = 3): array
+    {
+        for ($attempt = 1; ; $attempt++) {
+            try {
+                $result = $this->rpc->call('scantxoutset', ['start', $descriptors]);
+                if (!is_array($result) || empty($result['success'])) {
+                    throw new \RuntimeException('scantxoutset did not complete successfully');
+                }
+                return $result;
+            } catch (RpcException $e) {
+                $scanBusy = $e->getCode() === -8 || stripos($e->getMessage(), 'scan already in progress') !== false;
+                if ($scanBusy && $attempt < $maxAttempts) {
+                    usleep(500_000);
+                    continue;
+                }
+                throw $e;
+            }
+        }
+    }
+
+    /**
+     * Sum of everything this wallet has sent (category 'send', absolute
+     * value) since $sinceUnixTs, read straight from the node's own
+     * transaction history via `listtransactions` -- the real on-chain
+     * outflow, not the app's own bookkeeping. Pass 0 for all-time. Pages
+     * backward from the most recent transaction and stops as soon as it
+     * reaches one older than $sinceUnixTs, so a narrow window (hourly/daily
+     * budget) stays cheap regardless of the wallet's total history size.
+     * Capped at self::MAX_LISTTRANSACTIONS_PAGES pages as a hard safety
+     * limit against an unbounded scan if something is off with the node.
+     */
+    public function getSentSatSince(int $sinceUnixTs): int
+    {
+        $sat = 0;
+        $skip = 0;
+        $pageSize = 100;
+        for ($page = 0; $page < self::MAX_LISTTRANSACTIONS_PAGES; $page++) {
+            $txs = $this->rpc->call('listtransactions', ['*', $pageSize, $skip, false]);
+            if (!is_array($txs) || $txs === []) {
+                break;
+            }
+            // Core returns each page oldest-first; walk it back-to-front so
+            // we see the newest transactions first and can stop as soon as
+            // we cross $sinceUnixTs, instead of always paging to the end.
+            for ($i = count($txs) - 1; $i >= 0; $i--) {
+                $tx = $txs[$i];
+                if ((int)($tx['time'] ?? 0) < $sinceUnixTs) {
+                    return $sat;
+                }
+                if (($tx['category'] ?? '') === 'send') {
+                    $sat += (int)round(abs((float)($tx['amount'] ?? 0)) * 100_000_000);
+                }
+            }
+            if (count($txs) < $pageSize) {
+                break;
+            }
+            $skip += $pageSize;
+        }
+        return $sat;
     }
 }

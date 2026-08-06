@@ -68,7 +68,14 @@ if ($lockAcquired !== 1) {
 }
 
 try {
-    $err = RateLimiter::check($address, $ip);
+    try {
+        $wallet = Wallet::fromSettings();
+    } catch (\Throwable) {
+        Db::exec("SELECT RELEASE_LOCK('elek_faucet_claim')");
+        $back(false, __('err.busy'));
+    }
+
+    $err = RateLimiter::check($address, $ip, $wallet);
     if ($err !== null) {
         Db::exec("SELECT RELEASE_LOCK('elek_faucet_claim')");
         $back(false, $err);
@@ -92,8 +99,7 @@ try {
 }
 
 try {
-    $wallet = Wallet::fromSettings();
-    $txid   = $wallet->send($address, $amountElek, 'faucet');
+    $txid = $wallet->send($address, $amountElek, 'faucet');
     Db::exec(
         "UPDATE claims SET status = 'sent', txid = ?, sent_at = NOW() WHERE id = ?",
         [$txid, $claimId]

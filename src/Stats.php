@@ -5,33 +5,10 @@ namespace ElektronFaucet;
 
 final class Stats
 {
-    public static function totalSentSat(): int
-    {
-        return (int)Db::fetchValue(
-            "SELECT COALESCE(SUM(amount_satoshi),0) FROM claims WHERE status = 'sent'"
-        );
-    }
-
     public static function totalSentCount(): int
     {
         return (int)Db::fetchValue(
             "SELECT COUNT(*) FROM claims WHERE status = 'sent'"
-        );
-    }
-
-    public static function spentLastHourSat(): int
-    {
-        return (int)Db::fetchValue(
-            "SELECT COALESCE(SUM(amount_satoshi),0) FROM claims
-             WHERE status <> 'failed' AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)"
-        );
-    }
-
-    public static function spentLastDaySat(): int
-    {
-        return (int)Db::fetchValue(
-            "SELECT COALESCE(SUM(amount_satoshi),0) FROM claims
-             WHERE status <> 'failed' AND created_at > DATE_SUB(NOW(), INTERVAL 1 DAY)"
         );
     }
 
@@ -165,6 +142,37 @@ final class Stats
         } catch (\Throwable) {
             Db::setSetting('wallet_balance_cache_at', (string)time());
             $cached = Db::getSetting('wallet_balance_cache_sat');
+            return $cached === null ? null : (int)$cached;
+        }
+    }
+
+    /**
+     * All-time total actually sent out by the wallet, in satoshis, read live
+     * from the node via Wallet::getSentSatSince(0) and throttled the same
+     * way as cachedWalletBalanceSat() -- so the public homepage/admin KPI
+     * reflect real on-chain outflow instead of this app's own `claims`
+     * bookkeeping, which only knows about payouts made through this
+     * codebase's claim flow.
+     *
+     * @return int|null Cached/fresh total in satoshis, or null if no
+     *                   successful read has ever been cached.
+     */
+    public static function cachedTotalSentSat(Wallet $wallet, int $minIntervalSeconds = 60): ?int
+    {
+        $last = (int)Db::getSetting('total_sent_cache_at', '0');
+        if (time() - $last < $minIntervalSeconds) {
+            $cached = Db::getSetting('total_sent_cache_sat');
+            return $cached === null ? null : (int)$cached;
+        }
+
+        try {
+            $sat = $wallet->getSentSatSince(0);
+            Db::setSetting('total_sent_cache_sat', (string)$sat);
+            Db::setSetting('total_sent_cache_at', (string)time());
+            return $sat;
+        } catch (\Throwable) {
+            Db::setSetting('total_sent_cache_at', (string)time());
+            $cached = Db::getSetting('total_sent_cache_sat');
             return $cached === null ? null : (int)$cached;
         }
     }

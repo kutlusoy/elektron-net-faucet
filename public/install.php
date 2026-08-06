@@ -57,7 +57,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['step'] ?? '') === 
                 'amount_elek'         => '0.001',
                 'daily_budget'        => '1',
                 'hourly_budget'       => '0.1',
-                'per_addr_cooldown_h' => '24',
+                'pending_guard_min'   => '30',
                 'per_ip_cooldown_h'   => '1',
                 'rpc_host'            => '127.0.0.1',
                 'rpc_port'            => '8332',
