@@ -32,7 +32,7 @@ browser-based setup wizard, configure everything from the admin panel.
 
 | Component       | Version                                     |
 |-----------------|---------------------------------------------|
-| PHP             | 8.1 or newer (`pdo_mysql`, `curl`, `openssl`, `mbstring`) |
+| PHP             | 8.1 or newer (`pdo_mysql`, `curl`, `openssl`, `mbstring`); the Docker image requires 8.3.36+ (CVE-2026-109618 / CVE-2026-109619, critical RCE), on your own host use 8.5.12, 8.4.27, 8.3.36 or 8.2.35 or newer |
 | MySQL/MariaDB   | MariaDB 10.4+ / MySQL 5.7+                  |
 | Web server      | Apache (`.htaccess` included) or Nginx      |
 | elektron-net    | A reachable node with JSON-RPC enabled      |

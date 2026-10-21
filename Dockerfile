@@ -6,9 +6,6 @@ ARG PHP_MIN_VERSION=8.3.36
 RUN php -r 'exit(version_compare(PHP_VERSION, $argv[1], ">=") ? 0 : 1);' "$PHP_MIN_VERSION" \
     || { echo "PHP $(php -r 'echo PHP_VERSION;') is older than $PHP_MIN_VERSION: rebuild with --pull --no-cache" >&2; exit 1; }
 
-# README states PHP 8.1+ as the minimum; pin to php:8.1-apache instead if you
-# need to match an older legacy host exactly.
-
 # pdo_mysql needs no extra apt packages (built against the bundled mysqlnd
 # driver). curl/mbstring need headers at build time only -- purge just the
 # named -dev/header packages afterwards, WITHOUT --auto-remove, so the
